@@ -12,3 +12,6 @@
 /comments CommentR POST
 
 /profile ProfileR GET
+
+
+/store-aquires-book StoreAquiresBookR POST GET

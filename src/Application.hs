@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
+-- {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Application
     ( getApplicationDev
@@ -44,6 +45,9 @@ import Handler.Common
 import Handler.Home
 import Handler.Comment
 import Handler.Profile
+import DB.ExampleEsqueleto
+import Handler.Books
+-- import Debug.Trace
 
 -- This line actually creates our YesodDispatch instance. It is the second half
 -- of the call to mkYesodData which occurs in Foundation.hs. Please see the
@@ -80,6 +84,8 @@ makeFoundation appSettings = do
     pool <- flip runLoggingT logFunc $ createPostgresqlPool
         (pgConnStr  $ appDatabaseConf appSettings)
         (pgPoolSize $ appDatabaseConf appSettings)
+
+    -- void $ trace "my pgConnStr --> " pgConnStr
 
     -- Perform database migration using our application's logging settings.
     runLoggingT (runSqlPool (runMigration migrateAll) pool) logFunc
@@ -169,6 +175,9 @@ getApplicationRepl :: IO (Int, App, Application)
 getApplicationRepl = do
     settings <- getAppSettings
     foundation <- makeFoundation settings
+    let myconnpool = appConnPool foundation
+    -- type ConnectionPool = Pool SqlBackend
+    print myconnpool -- Pool {numStripes = 1, idleTime = 20s, maxResources = 10}
     wsettings <- getDevSettings $ warpSettings foundation
     app1 <- makeApplication foundation
     return (getPort wsettings, foundation, app1)
@@ -188,3 +197,25 @@ handler h = getAppSettings >>= makeFoundation >>= flip unsafeHandler h
 -- | Run DB queries
 db :: ReaderT SqlBackend Handler a -> IO a
 db = handler . runDB
+
+renderTheQuery = do 
+   (txt, vals) <- db aaaRender
+   putStrLn txt
+   print vals 
+   
+-- example :: DB [Entity Person]
+-- example = select $ do
+--       people <- from $ Table @Person
+--       where_ (people ^. PersonName ==. val "John")
+--       pure people
+
+-- SELECT "person"."id", "person"."name", "person"."age"
+-- FROM "person"
+-- WHERE "person"."name" = ?
+
+-- [PersistText "John"]
+
+-- goal 
+-- SELECT "person"."id", "person"."name", "person"."age"
+-- FROM "person"
+-- WHERE "person"."name" = "John"

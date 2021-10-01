@@ -79,6 +79,15 @@ Nutrition
 	caffeine
 	specialIngredients
 
+
+Books
+	author 
+	genre
+	pageCount
+	cost 
+	new
+	
+
 music department 
 
 song 
