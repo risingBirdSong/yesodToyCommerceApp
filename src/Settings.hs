@@ -63,6 +63,7 @@ data AppSettings = AppSettings
     , appAuthDummyLogin         :: Bool
     -- ^ Indicate if auth dummy login should be enabled.
     -- store the one Wharehouse ID in here so that we can read it out
+    , appWharehouseLocation :: Int64
     }
 
 instance FromJSON AppSettings where
@@ -92,7 +93,7 @@ instance FromJSON AppSettings where
         appAnalytics              <- o .:? "analytics"
 
         appAuthDummyLogin         <- o .:? "auth-dummy-login"      .!= dev
-
+        appWharehouseLocation     <- o .: "wharehouse-location"
         return AppSettings {..}
 
 -- | Settings for 'widgetFile', such as which template languages to support and

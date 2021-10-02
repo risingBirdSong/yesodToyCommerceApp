@@ -198,24 +198,5 @@ handler h = getAppSettings >>= makeFoundation >>= flip unsafeHandler h
 db :: ReaderT SqlBackend Handler a -> IO a
 db = handler . runDB
 
-renderTheQuery = do 
-   (txt, vals) <- db aaaRender
-   putStrLn txt
-   print vals 
-   
--- example :: DB [Entity Person]
--- example = select $ do
---       people <- from $ Table @Person
---       where_ (people ^. PersonName ==. val "John")
---       pure people
 
--- SELECT "person"."id", "person"."name", "person"."age"
--- FROM "person"
--- WHERE "person"."name" = ?
-
--- [PersistText "John"]
-
--- goal 
--- SELECT "person"."id", "person"."name", "person"."age"
--- FROM "person"
--- WHERE "person"."name" = "John"
+getAccessToSettings = handler accessSettings

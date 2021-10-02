@@ -56,10 +56,16 @@ insertProduct f now = do
 
 -- requireCheckJsonBody :: forall a m. (MonadHandler m, FromJSON a) => m ()
 
+accessSettings :: Handler ()
+accessSettings = do 
+    gotYesod <- getYesod
+    let thesettings = appSettings gotYesod
+    print $ appWharehouseLocation thesettings
+
 postStoreAquiresBookR :: Handler Value 
 postStoreAquiresBookR = do
     -- :: type annotation
-    -- @ type application 
+    -- @ type application
     let defaultLocationId = toSqlKey (1 :: Int64)
     theTime <- getCurrentTime
     apiBook <- requireCheckJsonBody
