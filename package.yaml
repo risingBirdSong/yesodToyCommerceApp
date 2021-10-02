@@ -44,6 +44,15 @@ dependencies:
 - foreign-store
 - esqueleto
 
+# remember these for future projs
+default-extensions:
+- RankNTypes
+- OverloadedStrings
+- TypeApplications
+- GeneralizedNewtypeDeriving
+- DerivingStrategies
+- DeriveAnyClass
+- DeriveGeneric
 
 # The library contains all of our application code. The executable
 # defined below is just a thin wrapper.

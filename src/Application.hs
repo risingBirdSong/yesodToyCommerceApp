@@ -46,7 +46,7 @@ import Handler.Home
 import Handler.Comment
 import Handler.Profile
 import DB.ExampleEsqueleto
-import Handler.Books
+import Handler.Products
 -- import Debug.Trace
 
 -- This line actually creates our YesodDispatch instance. It is the second half

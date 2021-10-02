@@ -34,6 +34,15 @@ Follow
 
 -- My defintions
 
+PartialFoodWithLocation json
+    locationId StockLocationId
+	foodType FoodTypes 
+	brand Text
+	name Text
+	weight Double 
+	description Text
+    deriving Eq
+    deriving Show
 
 Food json
     productId ProductId
@@ -41,32 +50,45 @@ Food json
 	brand Text
 	name Text
 	weight Double 
-	nutritionId NutritionId
+	-- nutritionId NutritionId
 	description Text
     deriving Eq
     deriving Show
 
-Nutrition json
-	calories Int
-	fat Int -- grams
-	protein Int -- grams
-	carbs Int -- grams
-	caffeine Int -- milligrams
-	specialIngredients Text
+-- Nutrition json
+-- 	calories Int
+-- 	fat Int -- grams
+-- 	protein Int -- grams
+-- 	carbs Int -- grams
+-- 	caffeine Int -- milligrams
+-- 	specialIngredients Text
+--     deriving Eq
+--     deriving Show
+
+-- so the idea with the partial book is that it doesnt have a productId because a new product is generated in the handler and this productId is used. Also it has a location that can be used to generate the product. 
+-- really, should keep it simple now, imagining one wharehouse with multiple stores and defualting it's location to the wharehouse
+
+PartialBookWithLocation json
+    locationId StockLocationId
+    author Text
+    genre Text 
+    pageCount Int
+    cost Int
     deriving Eq
     deriving Show
 
 Book json
     productId ProductId
     author Text
-    -- genre Text 
-    -- pageCount Int
-    -- cost Int
+    genre Text 
+    pageCount Int
+    cost Int
     deriving Eq
     deriving Show
 
 
-Product json 
+Product json
+    stockLocationId StockLocationId
     acquired UTCTime
     
 
@@ -77,16 +99,27 @@ Customer json
     deriving Show
 
 Store json
-    productId ProductId
+    stockLocationId StockLocationId
     name Text
     balance Int
     deriving Eq
     deriving Show
 
+Wharehouse json 
+    stockLocationId StockLocationId
+    name Text
+    deriving Eq
+    deriving Show
+
+StockLocation json 
+    name Text
+    deriving Eq
+    deriving Show
+
 Order json
 	productId ProductId
-	buyerId Customer
-	seller Store
+	buyerId CustomerId
+	stockLocationId StockLocationId
 	status OrderStatus
     deriving Eq
     deriving Show

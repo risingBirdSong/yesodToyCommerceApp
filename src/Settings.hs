@@ -62,6 +62,7 @@ data AppSettings = AppSettings
 
     , appAuthDummyLogin         :: Bool
     -- ^ Indicate if auth dummy login should be enabled.
+    -- store the one Wharehouse ID in here so that we can read it out
     }
 
 instance FromJSON AppSettings where
