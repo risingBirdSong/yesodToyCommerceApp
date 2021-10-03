@@ -34,20 +34,9 @@ Follow
 
 -- My defintions
 
-PartialFoodWithLocation json
-    locationId StockLocationId
-	foodType FoodTypes 
-	brand Text
-	name Text
-	weight Double 
-	description Text
-    deriving Eq
-    deriving Show
-
 Food json
     productId ProductId
 	foodType FoodTypes 
-	brand Text
 	name Text
 	weight Double 
 	-- nutritionId NutritionId
@@ -68,17 +57,10 @@ Food json
 -- so the idea with the partial book is that it doesnt have a productId because a new product is generated in the handler and this productId is used. Also it has a location that can be used to generate the product. 
 -- really, should keep it simple now, imagining one wharehouse with multiple stores and defualting it's location to the wharehouse
 
-PartialBookWithLocation json
-    locationId StockLocationId
-    author Text
-    genre Text 
-    pageCount Int
-    cost Int
-    deriving Eq
-    deriving Show
-
 Book json
     productId ProductId
+    title Text
+    UniqueTitle title 
     author Text
     genre Text 
     pageCount Int

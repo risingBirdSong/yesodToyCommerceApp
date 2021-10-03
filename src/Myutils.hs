@@ -34,6 +34,5 @@ derivePersistField "FoodTypes"
 
 instance ToJSON FoodTypes where
     toEncoding = genericToEncoding defaultOptions
-
 instance FromJSON FoodTypes
 

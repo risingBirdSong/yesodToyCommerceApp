@@ -199,4 +199,11 @@ db :: ReaderT SqlBackend Handler a -> IO a
 db = handler . runDB
 
 
-getAccessToSettings = handler accessSettings
+-- getAccessToSettings = handler accessSettings
+
+-- callWharehouseNewRandomBook = handler postWharehouseNewRandomBook
+
+randomNewBookInWharehouse = handler $ postWharehouseNewRandomProduct toBook generateFakeBook
+randomNewFoodInWharehouse = handler $ postWharehouseNewRandomProduct toFood generateFakeFood
+
+-- insert into stock_location (id, name) values (1, 'our main wharehouse');

@@ -43,7 +43,8 @@ dependencies:
 - wai
 - foreign-store
 - esqueleto
-
+- fakedata
+- random
 # remember these for future projs
 default-extensions:
 - RankNTypes

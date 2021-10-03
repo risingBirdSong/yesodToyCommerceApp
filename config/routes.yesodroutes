@@ -14,6 +14,8 @@
 /profile ProfileR GET
 
 
-/store-aquires-book StoreAquiresBookR POST
+/wharehouse-aquires-book WharehouseAquiresBookR POST
 
-/store-aquires-food StoreAquiresFoodR POST
+/wharehouse-aquires-food WharehouseAquiresFoodR POST
+
+-- /
