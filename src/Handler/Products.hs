@@ -4,6 +4,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 
 
 module Handler.Products where
@@ -76,7 +78,7 @@ data CreateFood = CreateFood
 generateFakeFood :: IO CreateFood  
 generateFakeFood = do 
     let foodTypes = [Beverage , Snack , Dinner ]
-    foodTypeIndex :: Int <- randomRIO (0,2) 
+    foodTypeIndex :: Int <- randomRIO (0,length foodTypes) 
     name <- genRandom (FK.dish)
     weight :: Double <- randomRIO (1.0, 10.0)
     description <- genRandom (FK.descriptions)
@@ -100,6 +102,11 @@ insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (Prod
 insertProduct f now locationId = do
     prodId <- insert $ Product (toSqlKey locationId) now
     void $ insert (f prodId)
+
+insertProductBy f now locationId = do
+    prodId <- insert $ Product (toSqlKey locationId) now
+    void $ insertBy (f prodId)
+
 --  where
 --     defaultLocationId = toSqlKey (1 :: Int64)
 
@@ -119,27 +126,15 @@ postWharehouseAquiresBookR = do
     -- @ type application
     theTime <- getCurrentTime
     apiBook <- requireCheckJsonBody
-    _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
+    -- _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
+    _ <- runDB $ insertProductBy (toBook apiBook) theTime whareHouseId
+
     -- contrasted with the longer 
     -- _ <- runDB $ do
     --     prodId <- insert $ Product defaultLocationId theTime 
     -- --let theNewBook = Book aNewProduct  (partialBookWithLocationAuthor partialbook) (partialBookWithLocationGenre partialbook) (partialBookWithLocationPageCount partialbook) (partialBookWithLocationCost partialbook)
     --     insert $ toBook apiBook prodId
     sendResponseStatus status201 ("BOOK stocked in store" :: Text)
-
-postWharehouseNewRandomProduct
-  :: (PersistEntity a, Show b,
-      PersistEntityBackend a ~ SqlBackend) =>
-     (b -> ProductId -> a) -> IO b -> HandlerFor App () 
-postWharehouseNewRandomProduct toProduct generateRandomFakeProduct = do
-    gotYesod <- getYesod
-    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
-    theTime <- getCurrentTime
-    apiProduct <- liftIO generateRandomFakeProduct
-    _ <- runDB $ insertProduct (toProduct apiProduct) theTime whareHouseId
-    print $ apiProduct
-
-
 
 
 postWharehouseAquiresFoodR :: Handler Value 
@@ -155,3 +150,88 @@ postWharehouseAquiresFoodR = do
     -- insertedbook <- runDB $ insert $ theNewFood 
     -- print "food inserted"
     sendResponseStatus status201 ("FOOD stocked in store" :: Text)
+
+-- inferred type
+-- postWharehouseAquiresProductR
+--   :: (PersistEntity a, FromJSON t,
+--       PersistEntityBackend a ~ SqlBackend) =>
+--      (t -> ProductId -> a) -> HandlerFor App b
+postWharehouseAquiresProductR toProduct = do 
+    gotYesod <- getYesod 
+    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod    
+    theTime <- getCurrentTime
+    apiThing <- requireCheckJsonBody
+    theInsertion <- runDB $ insertProduct (toProduct apiThing) theTime whareHouseId
+    print theInsertion
+    sendResponseStatus status201 ("PRODUCT stocked in store" :: Text)
+
+
+-- postWharehouseNewRandomProduct
+--   :: (PersistEntity a, Show b,
+--       PersistEntityBackend a ~ SqlBackend) =>
+--      (b -> ProductId -> a) -> IO b -> HandlerFor App () 
+
+
+
+
+
+-- so this works but is very slow
+postWharehouseNewRandomProductBy toProduct generateRandomFakeProduct = do
+    gotYesod <- getYesod
+    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
+    theTime <- getCurrentTime
+    apiProduct <- liftIO generateRandomFakeProduct
+    _ <- runDB $ insertProductBy (toProduct apiProduct) theTime whareHouseId
+    print $ apiProduct
+
+
+postWharehouseNewRandomProduct toProduct generateRandomFakeProduct = do
+    gotYesod <- getYesod
+    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
+    theTime <- getCurrentTime
+    apiProduct <- liftIO generateRandomFakeProduct
+    _ <- runDB $ insertProduct (toProduct apiProduct) theTime whareHouseId
+    print $ apiProduct
+
+
+
+
+-- deleteAllBooks :: (MonadIO m, PersistQueryWrite backend,
+--         BaseBackend backend ~ SqlBackend) =>
+--         Handler ()
+
+-- QQQ 1
+--so without the above type, it is ambigious and get this error... is there a way to constrain the type to only a SqlBackend since I'm only using PostgreSQL
+
+--    • Couldn't match type ‘BaseBackend backend0’ with ‘SqlBackend’
+--         arising from a use of ‘deleteWhere’
+--       The type variable ‘backend0’ is ambiguous
+--     • In the expression: deleteWhere ([] :: [Filter Book])
+--       In an equation for ‘deleteAllBooks’:
+--           deleteAllBooks = deleteWhere ([] :: [Filter Book])
+--     • Relevant bindings include
+--         deleteAllBooks :: ReaderT backend0 m0 ()
+--           (bound at src/Handler/Products.hs:165:1)
+deleteAllBooks :: Handler ()
+deleteAllBooks = runDB $ deleteWhere ([] :: [Filter Book])
+    -- sendResponseStatus status201 ("FOOD stocked in store" :: Text)
+
+
+deleteAllFoods :: Handler ()
+deleteAllFoods = runDB $ deleteWhere ([] :: [Filter Food])
+
+-- QQQ 2 how can we pass this product in as an argument, the types get tricky  
+
+-- deleteTypeOfProduct :: (MonadIO m, PersistQueryWrite backend,
+--         BaseBackend backend ~ SqlBackend) =>
+--         record -> ReaderT backend m ()
+
+-- deleteTypeOfProduct :: Handler ()
+--  deleteTypeOfProduct :: forall site record p.
+--                                           (PersistQueryWrite (YesodPersistBackend site),
+--                                            YesodPersist site, PersistEntity record,
+--                                            PersistEntityBackend record
+--                                            ~ BaseBackend (YesodPersistBackend site)) =>
+--                                           p -> Handler ()
+-- deleteTypeOfProduct product = runDB $ deleteWhere ([] :: [Filter product])
+    

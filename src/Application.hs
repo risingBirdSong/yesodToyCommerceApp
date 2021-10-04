@@ -203,7 +203,16 @@ db = handler . runDB
 
 -- callWharehouseNewRandomBook = handler postWharehouseNewRandomBook
 
-randomNewBookInWharehouse = handler $ postWharehouseNewRandomProduct toBook generateFakeBook
+randomNewBookInWharehouse = handler $ postWharehouseNewRandomProductBy toBook generateFakeBook
 randomNewFoodInWharehouse = handler $ postWharehouseNewRandomProduct toFood generateFakeFood
 
+-- so this works but is very slow
+makeManyBooks = mapM_ (\_ -> handler $ postWharehouseNewRandomProductBy toBook generateFakeBook) [1..100] 
+makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood generateFakeFood ) [1..100] 
+
+
 -- insert into stock_location (id, name) values (1, 'our main wharehouse');
+handleDeleteAllBooks = handler deleteAllBooks
+handleDeleteAllFoods = handler deleteAllFoods
+
+-- handleNewWharehousebook = handler $ postWharehouseAquiresProductR toBook
