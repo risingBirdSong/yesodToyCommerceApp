@@ -59,7 +59,7 @@ data MenuTypes
 -- http://www.yesodweb.com/book/scaffolding-and-the-site-template#scaffolding-and-the-site-template_foundation_and_application_modules
 --
 -- This function also generates the following type synonyms:
--- type Handler = HandlerFor App
+-- type Handler = HandlerFor App -- App is site
 -- type Widget = WidgetFor App ()
 mkYesodData "App" $(parseRoutesFile "config/routes.yesodroutes")
 
@@ -224,6 +224,7 @@ instance YesodBreadcrumbs App where
 
 -- How to run database actions.
 instance YesodPersist App where
+    -- herehere 
     type YesodPersistBackend App = SqlBackend
     runDB :: SqlPersistT Handler a -> Handler a
     runDB action = do
@@ -297,3 +298,4 @@ unsafeHandler = Unsafe.fakeHandlerGetLogger appLogger
 -- https://github.com/yesodweb/yesod/wiki/Sending-email
 -- https://github.com/yesodweb/yesod/wiki/Serve-static-files-from-a-separate-domain
 -- https://github.com/yesodweb/yesod/wiki/i18n-messages-in-the-scaffolding
+

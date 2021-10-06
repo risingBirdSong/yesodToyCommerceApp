@@ -5,12 +5,14 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 
 
 module Handler.Products where
 
-import Import.Lifted 
+import Import.Lifted hiding (Proxy)
+import Data.Proxy
 import Data.Coerce
 import Database.Persist.Sql (toSqlKey)
 import Myutils
@@ -52,6 +54,9 @@ data CreateBook = CreateBook
     deriving Show
 
 -- (genRandom FK.author) (genRandom FK.genre) (randomRIO (50, 500) :: IO Int) (randomRIO (5, 50) :: IO Int)
+
+-- TODO maybe try to pull the specific generateFakeBook and generateFakeFood into a generic helper function? 
+
 generateFakeBook :: IO CreateBook
 generateFakeBook = do
     title <- genRandom FK.title
@@ -191,14 +196,16 @@ postWharehouseNewRandomProduct toProduct generateRandomFakeProduct = do
     theTime <- getCurrentTime
     apiProduct <- liftIO generateRandomFakeProduct
     _ <- runDB $ insertProduct (toProduct apiProduct) theTime whareHouseId
+    _ <- runDB deleteAllBooks'
     print $ apiProduct
 
 
+-- SqlPersistT m ~ ReaderT SqlBackend m
+-- type SqlPersistT = ReaderT SqlBackend
+deleteAllBooks' :: MonadIO m => ReaderT SqlBackend m  ()
+deleteAllBooks' = deleteWhere ([] :: [Filter Book])
 
-
--- deleteAllBooks :: (MonadIO m, PersistQueryWrite backend,
---         BaseBackend backend ~ SqlBackend) =>
---         Handler ()
+-- deleteAllBooks :: Handler ()
 
 -- QQQ 1
 --so without the above type, it is ambigious and get this error... is there a way to constrain the type to only a SqlBackend since I'm only using PostgreSQL
@@ -212,13 +219,61 @@ postWharehouseNewRandomProduct toProduct generateRandomFakeProduct = do
 --     • Relevant bindings include
 --         deleteAllBooks :: ReaderT backend0 m0 ()
 --           (bound at src/Handler/Products.hs:165:1)
+
+-- runDB
+--   :: YesodPersist site =>
+--      ReaderT (YesodPersistBackend site) (HandlerFor site) a
+--      -> HandlerFor site a
+
+-- :t deleteWhere
+-- (MonadIO m, PersistQueryWrite backend, PersistEntity record,
+--       PersistEntityBackend record ~ BaseBackend backend) =>
+--      [Filter record] -> ReaderT backend m ()
+
+-- deleteWhere ([] :: [Filter Book])
+--   :: (MonadIO m, PersistQueryWrite backend,
+--       BaseBackend backend ~ SqlBackend) =>
+--    ReaderT backend m ()
+-- type YesodDB site = ReaderT (YesodPersistBackend site) (HandlerFor site)
+
+-- runDB
+-- YesodDB site a -> HandlerFor site a
+-- HandleFor
+-- HandlerFor { unHandlerFor :: HandlerData site site -> IO a }
+-- ReaderT (YesodPersistBackend site) (HandlerFor site) a -> HandlerData site site -> IO a
+
+-- the a is really only the thing that we have control over 
+-- how could we fill in the other type params? Type applications on runDB 
+
+-- Handler is a type alias that is generated 
+
+---- ReaderT (YesodPersistBackend site) (HandlerFor site) a -> HandlerData site site -> IO a
+
+
+--deleteAllBooks :: HandlerFor site () -- this compiles because this is just an alias for Handler ()
+-- deleteAllBooks = runDB @App @() $ deleteWhere ([] :: [Filter Book]) 
+-- ~
+-- deleteAllBooks = (runDB :: YesodDB App () -> HandlerFor App ()) $ deleteWhere ([] :: [Filter Book])
+
+-- deleteWhere, a function like this is only operating on the polymorphic a, but it is constrained backend 
 deleteAllBooks :: Handler ()
 deleteAllBooks = runDB $ deleteWhere ([] :: [Filter Book])
     -- sendResponseStatus status201 ("FOOD stocked in store" :: Text)
 
+--type instance PersistEntityBackend Book = SqlBackend
+
+
+-- class (PersistField (Key record), ToJSON (Key record),
+--        FromJSON (Key record), Show (Key record), Read (Key record),
+--        Eq (Key record), Ord (Key record)) =>
+--       PersistEntity record where
+--   ...
+--   data family Key record
+
 
 deleteAllFoods :: Handler ()
 deleteAllFoods = runDB $ deleteWhere ([] :: [Filter Food])
+
 
 -- QQQ 2 how can we pass this product in as an argument, the types get tricky  
 
@@ -232,6 +287,17 @@ deleteAllFoods = runDB $ deleteWhere ([] :: [Filter Food])
 --                                            YesodPersist site, PersistEntity record,
 --                                            PersistEntityBackend record
 --                                            ~ BaseBackend (YesodPersistBackend site)) =>
---                                           p -> Handler ()
--- deleteTypeOfProduct product = runDB $ deleteWhere ([] :: [Filter product])
-    
+--      
+-- the Proxy a only exists at type level, not at value level                                     p -> Handler ()
+-- data Proxy a = Proxy
+deleteTypeOfProduct :: forall a m. (PersistEntityBackend a ~ SqlBackend, MonadIO m, PersistEntity a)=> Proxy a -> SqlPersistT m ()
+deleteTypeOfProduct _ = deleteWhere ([] :: [Filter a])
+
+-- deleteTypeOfProduct' (Proxy :: Proxy Book)
+-- deleteTypeOfProduct' (Proxy @Book)    
+
+deleteTypeOfProduct'' :: forall a m. (PersistEntityBackend a ~ SqlBackend, MonadIO m, PersistEntity a) => SqlPersistT m ()
+deleteTypeOfProduct'' = deleteWhere @_ @_ @a []
+
+-- deleteTypeOfProduct'' @Book
+
