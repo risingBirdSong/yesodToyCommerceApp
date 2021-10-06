@@ -130,9 +130,11 @@ postWharehouseAquiresBookR = do
     -- :: type annotation
     -- @ type application
     theTime <- getCurrentTime
-    apiBook <- requireCheckJsonBody
-    -- _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
-    _ <- runDB $ insertProductBy (toBook apiBook) theTime whareHouseId
+    apiBook :: CreateBook <- requireCheckJsonBody
+    _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
+    -- liftIO $ print apiBook
+    --myTodo bring the below line back from comment
+    -- _ <- runDB $ insertProductBy (toBook apiBook) theTime whareHouseId
 
     -- contrasted with the longer 
     -- _ <- runDB $ do
@@ -141,6 +143,30 @@ postWharehouseAquiresBookR = do
     --     insert $ toBook apiBook prodId
     sendResponseStatus status201 ("BOOK stocked in store" :: Text)
 
+-- herehere
+postWhareHouseAcquiresGenericProductR :: Handler Value 
+postWhareHouseAcquiresGenericProductR = do 
+    gotYesod <- getYesod
+    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod 
+    theTime <- getCurrentTime
+    --example of query parameters
+    getParameters <- reqGetParams <$> getRequest -- Params: [("product","book")]
+    let mybProduct = lookup "product" getParameters -- Just "book"
+    case mybProduct of
+        Nothing -> sendResponseStatus status201 ("BOOK stocked in store" :: Text)
+        Just "book" -> do
+            apiBook :: CreateBook <- requireCheckJsonBody  
+            _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
+            sendResponseStatus status201 ("book inserted into wharehouse" :: Text)
+
+        Just "food" -> do
+            apiFood :: CreateFood <- requireCheckJsonBody
+            _ <- runDB $ insertProduct (toFood apiFood) theTime whareHouseId
+            sendResponseStatus status201 ("food inserted into wharehouse" :: Text)
+
+    -- mytodo remove the dleete, its jsut for cleanup
+    -- _ <- runDB $ deleteTypeOfProduct'' @Book
+    
 
 postWharehouseAquiresFoodR :: Handler Value 
 postWharehouseAquiresFoodR = do
@@ -156,20 +182,21 @@ postWharehouseAquiresFoodR = do
     -- print "food inserted"
     sendResponseStatus status201 ("FOOD stocked in store" :: Text)
 
+-- ok so postWharehouseAquiresProductR is interesting but not practical, how would you pass in toProduct?
+
 -- inferred type
 -- postWharehouseAquiresProductR
 --   :: (PersistEntity a, FromJSON t,
 --       PersistEntityBackend a ~ SqlBackend) =>
 --      (t -> ProductId -> a) -> HandlerFor App b
-postWharehouseAquiresProductR toProduct = do 
-    gotYesod <- getYesod 
-    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod    
-    theTime <- getCurrentTime
-    apiThing <- requireCheckJsonBody
-    theInsertion <- runDB $ insertProduct (toProduct apiThing) theTime whareHouseId
-    print theInsertion
-    sendResponseStatus status201 ("PRODUCT stocked in store" :: Text)
-
+-- postWharehouseAquiresProductR toProduct = do 
+--     gotYesod <- getYesod 
+--     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod    
+--     theTime <- getCurrentTime
+--     apiThing <- requireCheckJsonBody
+--     theInsertion <- runDB $ insertProduct (toProduct apiThing) theTime whareHouseId
+--     print theInsertion
+--     sendResponseStatus status201 ("PRODUCT stocked in store" :: Text)
 
 -- postWharehouseNewRandomProduct
 --   :: (PersistEntity a, Show b,
@@ -299,5 +326,9 @@ deleteTypeOfProduct _ = deleteWhere ([] :: [Filter a])
 deleteTypeOfProduct'' :: forall a m. (PersistEntityBackend a ~ SqlBackend, MonadIO m, PersistEntity a) => SqlPersistT m ()
 deleteTypeOfProduct'' = deleteWhere @_ @_ @a []
 
--- deleteTypeOfProduct'' @Book
-
+-- call this in src/Application.hs 
+handleDeleteAllBook :: Handler ()
+handleDeleteAllBook = do
+    _ <- runDB $ deleteTypeOfProduct'' @Book
+    liftIO $ putStrLn "i just deleted all books"
+    pure ()
