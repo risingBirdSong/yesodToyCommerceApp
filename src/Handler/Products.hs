@@ -89,19 +89,17 @@ generateFakeFood = do
     description <- genRandom (FK.descriptions)
     pure $ CreateFood (foodTypes !! foodTypeIndex) name weight description
 
--- possibleFoods = [Beverage , Snack , Dinner]
-
--- generateFakeFood :: IO CreateFood
--- generateFakeFood = do
---     pure 
-
 -- hmm don't know why this wasnt exported... generateNonDeterministic
 genRandom =  FK.generateWithSettings $ FK.setNonDeterministic FK.defaultFakerSettings
 
 
 -- also consider the reverse where we convert the BD representation to the API representation
 
+-- not being used currently 
 data Products = Books Book | Foods Food
+
+
+-- inferredTypeInsertProduct :: (PersistStoreWrite backend, MonadIO m, PersistEntity record, PersistEntityBackend record ~ BaseBackend backend,  BaseBackend backend ~ SqlBackend) => (Key Product -> record) -> UTCTime -> Int64 -> ReaderT backend m ()
 
 insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> UTCTime -> Int64  ->  DB ()
 insertProduct f now locationId = do
@@ -111,39 +109,17 @@ insertProduct f now locationId = do
 insertProductBy f now locationId = do
     prodId <- insert $ Product (toSqlKey locationId) now
     void $ insertBy (f prodId)
-
---  where
---     defaultLocationId = toSqlKey (1 :: Int64)
-
--- newtype Sum = Sum { unSum :: Int }
-
--- coerce 2 :: Sum
--- coerce (Sum 2) :: Int
-
--- requireCheckJsonBody :: forall a m. (MonadHandler m, FromJSON a) => m ()
-
  
 postWharehouseAquiresBookR :: Handler Value 
 postWharehouseAquiresBookR = do
     gotYesod <- getYesod
     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
-    -- :: type annotation
-    -- @ type application
     theTime <- getCurrentTime
     apiBook :: CreateBook <- requireCheckJsonBody
     _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
-    -- liftIO $ print apiBook
-    --myTodo bring the below line back from comment
-    -- _ <- runDB $ insertProductBy (toBook apiBook) theTime whareHouseId
-
-    -- contrasted with the longer 
-    -- _ <- runDB $ do
-    --     prodId <- insert $ Product defaultLocationId theTime 
-    -- --let theNewBook = Book aNewProduct  (partialBookWithLocationAuthor partialbook) (partialBookWithLocationGenre partialbook) (partialBookWithLocationPageCount partialbook) (partialBookWithLocationCost partialbook)
-    --     insert $ toBook apiBook prodId
     sendResponseStatus status201 ("BOOK stocked in store" :: Text)
 
--- herehere
+-- so this is using query params but maybe better to put this info in an apiJson?
 postWhareHouseAcquiresGenericProductR :: Handler Value 
 postWhareHouseAcquiresGenericProductR = do 
     gotYesod <- getYesod
@@ -164,9 +140,7 @@ postWhareHouseAcquiresGenericProductR = do
             _ <- runDB $ insertProduct (toFood apiFood) theTime whareHouseId
             sendResponseStatus status201 ("food inserted into wharehouse" :: Text)
 
-    -- mytodo remove the dleete, its jsut for cleanup
-    -- _ <- runDB $ deleteTypeOfProduct'' @Book
-    
+
 
 postWharehouseAquiresFoodR :: Handler Value 
 postWharehouseAquiresFoodR = do
@@ -176,36 +150,7 @@ postWharehouseAquiresFoodR = do
     apiFood <- requireCheckJsonBody
     theInsertion <- runDB $ insertProduct (toFood apiFood) theTime whareHouseId
     print theInsertion
-    -- aNewProduct <- runDB $ insert $ Product (partialFoodWithLocationLocationId partialFood) theTime
-    -- let theNewFood = Food aNewProduct (partialFoodWithLocationFoodType partialFood) (partialFoodWithLocationBrand partialFood) (partialFoodWithLocationName partialFood) (partialFoodWithLocationWeight partialFood) (partialFoodWithLocationDescription partialFood)
-    -- insertedbook <- runDB $ insert $ theNewFood 
-    -- print "food inserted"
     sendResponseStatus status201 ("FOOD stocked in store" :: Text)
-
--- ok so postWharehouseAquiresProductR is interesting but not practical, how would you pass in toProduct?
-
--- inferred type
--- postWharehouseAquiresProductR
---   :: (PersistEntity a, FromJSON t,
---       PersistEntityBackend a ~ SqlBackend) =>
---      (t -> ProductId -> a) -> HandlerFor App b
--- postWharehouseAquiresProductR toProduct = do 
---     gotYesod <- getYesod 
---     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod    
---     theTime <- getCurrentTime
---     apiThing <- requireCheckJsonBody
---     theInsertion <- runDB $ insertProduct (toProduct apiThing) theTime whareHouseId
---     print theInsertion
---     sendResponseStatus status201 ("PRODUCT stocked in store" :: Text)
-
--- postWharehouseNewRandomProduct
---   :: (PersistEntity a, Show b,
---       PersistEntityBackend a ~ SqlBackend) =>
---      (b -> ProductId -> a) -> IO b -> HandlerFor App () 
-
-
-
-
 
 -- so this works but is very slow
 postWharehouseNewRandomProductBy toProduct generateRandomFakeProduct = do
@@ -232,91 +177,15 @@ postWharehouseNewRandomProduct toProduct generateRandomFakeProduct = do
 deleteAllBooks' :: MonadIO m => ReaderT SqlBackend m  ()
 deleteAllBooks' = deleteWhere ([] :: [Filter Book])
 
--- deleteAllBooks :: Handler ()
-
--- QQQ 1
---so without the above type, it is ambigious and get this error... is there a way to constrain the type to only a SqlBackend since I'm only using PostgreSQL
-
---    • Couldn't match type ‘BaseBackend backend0’ with ‘SqlBackend’
---         arising from a use of ‘deleteWhere’
---       The type variable ‘backend0’ is ambiguous
---     • In the expression: deleteWhere ([] :: [Filter Book])
---       In an equation for ‘deleteAllBooks’:
---           deleteAllBooks = deleteWhere ([] :: [Filter Book])
---     • Relevant bindings include
---         deleteAllBooks :: ReaderT backend0 m0 ()
---           (bound at src/Handler/Products.hs:165:1)
-
--- runDB
---   :: YesodPersist site =>
---      ReaderT (YesodPersistBackend site) (HandlerFor site) a
---      -> HandlerFor site a
-
--- :t deleteWhere
--- (MonadIO m, PersistQueryWrite backend, PersistEntity record,
---       PersistEntityBackend record ~ BaseBackend backend) =>
---      [Filter record] -> ReaderT backend m ()
-
--- deleteWhere ([] :: [Filter Book])
---   :: (MonadIO m, PersistQueryWrite backend,
---       BaseBackend backend ~ SqlBackend) =>
---    ReaderT backend m ()
--- type YesodDB site = ReaderT (YesodPersistBackend site) (HandlerFor site)
-
--- runDB
--- YesodDB site a -> HandlerFor site a
--- HandleFor
--- HandlerFor { unHandlerFor :: HandlerData site site -> IO a }
--- ReaderT (YesodPersistBackend site) (HandlerFor site) a -> HandlerData site site -> IO a
-
--- the a is really only the thing that we have control over 
--- how could we fill in the other type params? Type applications on runDB 
-
--- Handler is a type alias that is generated 
-
----- ReaderT (YesodPersistBackend site) (HandlerFor site) a -> HandlerData site site -> IO a
-
-
---deleteAllBooks :: HandlerFor site () -- this compiles because this is just an alias for Handler ()
--- deleteAllBooks = runDB @App @() $ deleteWhere ([] :: [Filter Book]) 
--- ~
--- deleteAllBooks = (runDB :: YesodDB App () -> HandlerFor App ()) $ deleteWhere ([] :: [Filter Book])
-
--- deleteWhere, a function like this is only operating on the polymorphic a, but it is constrained backend 
 deleteAllBooks :: Handler ()
 deleteAllBooks = runDB $ deleteWhere ([] :: [Filter Book])
-    -- sendResponseStatus status201 ("FOOD stocked in store" :: Text)
-
---type instance PersistEntityBackend Book = SqlBackend
-
-
--- class (PersistField (Key record), ToJSON (Key record),
---        FromJSON (Key record), Show (Key record), Read (Key record),
---        Eq (Key record), Ord (Key record)) =>
---       PersistEntity record where
---   ...
---   data family Key record
 
 
 deleteAllFoods :: Handler ()
 deleteAllFoods = runDB $ deleteWhere ([] :: [Filter Food])
 
 
--- QQQ 2 how can we pass this product in as an argument, the types get tricky  
 
--- deleteTypeOfProduct :: (MonadIO m, PersistQueryWrite backend,
---         BaseBackend backend ~ SqlBackend) =>
---         record -> ReaderT backend m ()
-
--- deleteTypeOfProduct :: Handler ()
---  deleteTypeOfProduct :: forall site record p.
---                                           (PersistQueryWrite (YesodPersistBackend site),
---                                            YesodPersist site, PersistEntity record,
---                                            PersistEntityBackend record
---                                            ~ BaseBackend (YesodPersistBackend site)) =>
---      
--- the Proxy a only exists at type level, not at value level                                     p -> Handler ()
--- data Proxy a = Proxy
 deleteTypeOfProduct :: forall a m. (PersistEntityBackend a ~ SqlBackend, MonadIO m, PersistEntity a)=> Proxy a -> SqlPersistT m ()
 deleteTypeOfProduct _ = deleteWhere ([] :: [Filter a])
 
