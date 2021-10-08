@@ -22,6 +22,9 @@ import qualified Faker.Address as FK
 import qualified Faker.Food as FK
 import System.Random
 import Data.List ((!!))
+import DB.TransferProductsLocation
+import Database.Esqueleto.Experimental as E hiding (Value)
+-- import Database.Esqueleto.Experimental.From.Join
 
 data ABook = ABook {aBook :: Entity Book}
     deriving (Generic)
@@ -201,3 +204,19 @@ handleDeleteAllBook = do
     _ <- runDB $ deleteTypeOfProduct'' @Book
     liftIO $ putStrLn "i just deleted all books"
     pure ()
+
+
+findProduct prodId = do 
+    select $ do
+        (prod :& food) <- 
+            from $ Table @Product 
+                `LeftJoin` Table @Food
+                `E.on` (\(prod :& food) -> 
+                        prod ^. ProductId E.==. food ?. FoodProductId
+                    )
+        pure (prod ^. ProductId , food ?. FoodProductId)
+
+-- transferAProdFromLocAtoB :: todo
+-- transferAProdFromLocAtoB prodId locA locB = do
+--     runDB $ do
+--        maybeProd <- selectFirst [] []  
