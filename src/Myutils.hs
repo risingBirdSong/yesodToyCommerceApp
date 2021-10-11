@@ -13,26 +13,29 @@ import Data.Fixed
 
 
 
+data ProductTypes = BookProduct | FoodProduct -- myTodo add in more later 
+    deriving (Show, Read,  Eq, Generic)
+derivePersistField "ProductTypes"
+
+instance ToJSON ProductTypes
+instance FromJSON ProductTypes
 
 
 data Departments = 	MusicDept | BooksDept | FoodDept | ClothesDept | FurnitureDept deriving (Show, Read, Eq, Generic)
 derivePersistField "Departments"
 
 instance ToJSON Departments where
-    toEncoding = genericToEncoding defaultOptions
 instance FromJSON Departments
 
 data OrderStatus = Processing | InTransit | Delivered | Cancelled deriving (Show, Read, Eq, Generic)
 derivePersistField "OrderStatus"
 
 instance ToJSON OrderStatus where
-    toEncoding = genericToEncoding defaultOptions
 instance FromJSON OrderStatus
 
 data FoodTypes =  Beverage | Snack | Dinner deriving (Show, Read, Eq, Generic)
 derivePersistField "FoodTypes"
 
 instance ToJSON FoodTypes where
-    toEncoding = genericToEncoding defaultOptions
 instance FromJSON FoodTypes
 

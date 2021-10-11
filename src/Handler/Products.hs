@@ -206,15 +206,15 @@ handleDeleteAllBook = do
     pure ()
 
 
-findProduct prodId = do 
-    select $ do
-        (prod :& food) <- 
-            from $ Table @Product 
-                `LeftJoin` Table @Food
-                `E.on` (\(prod :& food) -> 
-                        prod ^. ProductId E.==. food ?. FoodProductId
-                    )
-        pure (prod ^. ProductId , food ?. FoodProductId)
+-- findProduct prodId = do 
+--     select $ do
+--         (prod :& food) <- 
+--             from $ Table @Product 
+--                 `LeftJoin` Table @Food
+--                 `E.on` (\(prod :& food) -> 
+--                         just (prod ^. ProductId) E.==. food ?. FoodProductId
+--                     )
+--         pure (prod ^. ProductId , food ?. FoodProductId)
 
 -- transferAProdFromLocAtoB :: todo
 -- transferAProdFromLocAtoB prodId locA locB = do
