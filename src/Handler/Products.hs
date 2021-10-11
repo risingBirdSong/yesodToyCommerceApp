@@ -104,13 +104,14 @@ data Products = Books Book | Foods Food
 
 -- inferredTypeInsertProduct :: (PersistStoreWrite backend, MonadIO m, PersistEntity record, PersistEntityBackend record ~ BaseBackend backend,  BaseBackend backend ~ SqlBackend) => (Key Product -> record) -> UTCTime -> Int64 -> ReaderT backend m ()
 
-insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> UTCTime -> Int64  ->  DB ()
-insertProduct f now locationId = do
-    prodId <- insert $ Product (toSqlKey locationId) now
+-- insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> UTCTime -> Int64  ->  DB ()
+insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> ProductTypes -> UTCTime -> Int64  ->  DB ()
+insertProduct f productType now locationId = do
+    prodId <- insert $ Product productType (toSqlKey locationId) now
     void $ insert (f prodId)
 
-insertProductBy f now locationId = do
-    prodId <- insert $ Product (toSqlKey locationId) now
+insertProductBy f productTypes now locationId = do
+    prodId <- insert $ Product productTypes (toSqlKey locationId) now
     void $ insertBy (f prodId)
  
 postWharehouseAquiresBookR :: Handler Value 
@@ -119,60 +120,60 @@ postWharehouseAquiresBookR = do
     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
     theTime <- getCurrentTime
     apiBook :: CreateBook <- requireCheckJsonBody
-    _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
+    _ <- runDB $ insertProduct (toBook apiBook) BookProduct theTime whareHouseId
     sendResponseStatus status201 ("BOOK stocked in store" :: Text)
 
 -- so this is using query params but maybe better to put this info in an apiJson?
-postWhareHouseAcquiresGenericProductR :: Handler Value 
-postWhareHouseAcquiresGenericProductR = do 
-    gotYesod <- getYesod
-    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod 
-    theTime <- getCurrentTime
-    --example of query parameters
-    getParameters <- reqGetParams <$> getRequest -- Params: [("product","book")]
-    let mybProduct = lookup "product" getParameters -- Just "book"
-    case mybProduct of
-        Nothing -> sendResponseStatus status201 ("BOOK stocked in store" :: Text)
-        Just "book" -> do
-            apiBook :: CreateBook <- requireCheckJsonBody  
-            _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
-            sendResponseStatus status201 ("book inserted into wharehouse" :: Text)
+-- postWhareHouseAcquiresGenericProductR :: Handler Value 
+-- postWhareHouseAcquiresGenericProductR = do 
+--     gotYesod <- getYesod
+--     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod 
+--     theTime <- getCurrentTime
+--     --example of query parameters
+--     getParameters <- reqGetParams <$> getRequest -- Params: [("product","book")]
+--     let mybProduct = lookup "product" getParameters -- Just "book"
+--     case mybProduct of
+--         Nothing -> sendResponseStatus status201 ("BOOK stocked in store" :: Text)
+--         Just "book" -> do
+--             apiBook :: CreateBook <- requireCheckJsonBody  
+--             _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
+--             sendResponseStatus status201 ("book inserted into wharehouse" :: Text)
 
-        Just "food" -> do
-            apiFood :: CreateFood <- requireCheckJsonBody
-            _ <- runDB $ insertProduct (toFood apiFood) theTime whareHouseId
-            sendResponseStatus status201 ("food inserted into wharehouse" :: Text)
+--         Just "food" -> do
+--             apiFood :: CreateFood <- requireCheckJsonBody
+--             _ <- runDB $ insertProduct (toFood apiFood) theTime whareHouseId
+--             sendResponseStatus status201 ("food inserted into wharehouse" :: Text)
 
 
-
+-- myTodo bring this back
 postWharehouseAquiresFoodR :: Handler Value 
 postWharehouseAquiresFoodR = do
     gotYesod <- getYesod 
     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
     theTime <- getCurrentTime
     apiFood <- requireCheckJsonBody
-    theInsertion <- runDB $ insertProduct (toFood apiFood) theTime whareHouseId
+    theInsertion <- runDB $ insertProduct (toFood apiFood) FoodProduct theTime whareHouseId
     print theInsertion
     sendResponseStatus status201 ("FOOD stocked in store" :: Text)
 
--- so this works but is very slow
-postWharehouseNewRandomProductBy toProduct generateRandomFakeProduct = do
-    gotYesod <- getYesod
-    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
-    theTime <- getCurrentTime
-    apiProduct <- liftIO generateRandomFakeProduct
-    _ <- runDB $ insertProductBy (toProduct apiProduct) theTime whareHouseId
-    print $ apiProduct
+-- so this works but is very slow myTodo bring this code back
+-- postWharehouseNewRandomProductBy toProduct generateRandomFakeProduct = do
+--     gotYesod <- getYesod
+--     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
+--     theTime <- getCurrentTime
+--     apiProduct <- liftIO generateRandomFakeProduct
+--     _ <- runDB $ insertProductBy (toProduct apiProduct) theTime whareHouseId
+--     print $ apiProduct
 
-
-postWharehouseNewRandomProduct toProduct generateRandomFakeProduct = do
-    gotYesod <- getYesod
-    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
-    theTime <- getCurrentTime
-    apiProduct <- liftIO generateRandomFakeProduct
-    _ <- runDB $ insertProduct (toProduct apiProduct) theTime whareHouseId
-    _ <- runDB deleteAllBooks'
-    print $ apiProduct
+--myTodo bring this code back
+-- postWharehouseNewRandomProduct toProduct generateRandomFakeProduct = do
+--     gotYesod <- getYesod
+--     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
+--     theTime <- getCurrentTime
+--     apiProduct <- liftIO generateRandomFakeProduct
+--     _ <- runDB $ insertProduct (toProduct apiProduct) theTime whareHouseId
+--     _ <- runDB deleteAllBooks'
+--     print $ apiProduct
 
 
 -- SqlPersistT m ~ ReaderT SqlBackend m

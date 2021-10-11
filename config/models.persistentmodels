@@ -70,7 +70,7 @@ Book json
 
 
 Product json
-    -- productType ProductTypes  
+    productType ProductTypes  
     -- we want to constrain this to ensure we only have one product id
     -- because right now we could have duplicate ids which is bad
     
