@@ -71,10 +71,6 @@ Book json
 
 Product json
     productType ProductTypes  
-    -- we want to constrain this to ensure we only have one product id
-    -- because right now we could have duplicate ids which is bad
-    
-    -- all the data that overlaps can be kept on the product table, but has its own constrain
     stockLocationId StockLocationId
     acquired UTCTime
     

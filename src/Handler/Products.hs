@@ -23,7 +23,8 @@ import qualified Faker.Food as FK
 import System.Random
 import Data.List ((!!))
 import DB.TransferProductsLocation
-import Database.Esqueleto.Experimental as E hiding (Value)
+import Data.Text.Read
+-- import Database.Esqueleto.Experimental as E hiding (Value)
 -- import Database.Esqueleto.Experimental.From.Join
 
 data ABook = ABook {aBook :: Entity Book}
@@ -86,7 +87,7 @@ data CreateFood = CreateFood
 generateFakeFood :: IO CreateFood  
 generateFakeFood = do 
     let foodTypes = [Beverage , Snack , Dinner ]
-    foodTypeIndex :: Int <- randomRIO (0,length foodTypes) 
+    foodTypeIndex :: Int <- randomRIO (0,length foodTypes -1 ) 
     name <- genRandom (FK.dish)
     weight :: Double <- randomRIO (1.0, 10.0)
     description <- genRandom (FK.descriptions)
@@ -113,7 +114,21 @@ insertProduct f productType now locationId = do
 insertProductBy f productTypes now locationId = do
     prodId <- insert $ Product productTypes (toSqlKey locationId) now
     void $ insertBy (f prodId)
- 
+
+makeMainWharehouse :: Handler () 
+makeMainWharehouse = do
+    runDB $ do    
+        wharehouseStocklocationId <- insert $ StockLocation "main wharehouse location"
+        mainWharehouse <- insert $ Wharehouse wharehouseStocklocationId "main wharehouse"
+        pure ()
+
+makeAStore :: StockLocationId -> Text -> Int -> Handler () 
+makeAStore locId name balance = do 
+    runDB $ do
+        insert $ StockLocation name 
+        insert $ Store locId name balance
+    pure ()
+
 postWharehouseAquiresBookR :: Handler Value 
 postWharehouseAquiresBookR = do
     gotYesod <- getYesod
@@ -157,23 +172,22 @@ postWharehouseAquiresFoodR = do
     sendResponseStatus status201 ("FOOD stocked in store" :: Text)
 
 -- so this works but is very slow myTodo bring this code back
--- postWharehouseNewRandomProductBy toProduct generateRandomFakeProduct = do
---     gotYesod <- getYesod
---     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
---     theTime <- getCurrentTime
---     apiProduct <- liftIO generateRandomFakeProduct
---     _ <- runDB $ insertProductBy (toProduct apiProduct) theTime whareHouseId
---     print $ apiProduct
+postWharehouseNewRandomProductBy toProduct theProductType generateRandomFakeProduct = do
+    gotYesod <- getYesod
+    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
+    theTime <- getCurrentTime
+    apiProduct <- liftIO generateRandomFakeProduct
+    _ <- runDB $ insertProductBy (toProduct apiProduct) theProductType theTime whareHouseId
+    print $ apiProduct
 
---myTodo bring this code back
--- postWharehouseNewRandomProduct toProduct generateRandomFakeProduct = do
---     gotYesod <- getYesod
---     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
---     theTime <- getCurrentTime
---     apiProduct <- liftIO generateRandomFakeProduct
---     _ <- runDB $ insertProduct (toProduct apiProduct) theTime whareHouseId
---     _ <- runDB deleteAllBooks'
---     print $ apiProduct
+postWharehouseNewRandomProduct toProduct theProductType generateRandomFakeProduct = do
+    gotYesod <- getYesod
+    let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
+    theTime <- getCurrentTime
+    apiProduct <- liftIO generateRandomFakeProduct
+    _ <- runDB $ insertProduct (toProduct apiProduct) theProductType theTime whareHouseId
+    _ <- runDB deleteAllBooks'
+    print $ apiProduct
 
 
 -- SqlPersistT m ~ ReaderT SqlBackend m
@@ -188,10 +202,12 @@ deleteAllBooks = runDB $ deleteWhere ([] :: [Filter Book])
 deleteAllFoods :: Handler ()
 deleteAllFoods = runDB $ deleteWhere ([] :: [Filter Food])
 
+deleteAllProducts :: Handler ()
+deleteAllProducts = runDB $ deleteWhere ([] :: [Filter Product])
 
 
-deleteTypeOfProduct :: forall a m. (PersistEntityBackend a ~ SqlBackend, MonadIO m, PersistEntity a)=> Proxy a -> SqlPersistT m ()
-deleteTypeOfProduct _ = deleteWhere ([] :: [Filter a])
+-- deleteTypeOfProduct :: forall a m. (PersistEntityBackend a ~ SqlBackend, MonadIO m, PersistEntity a)=> Proxy a -> SqlPersistT m ()
+-- deleteTypeOfProduct _ = deleteWhere ([] :: [Filter a])
 
 -- deleteTypeOfProduct' (Proxy :: Proxy Book)
 -- deleteTypeOfProduct' (Proxy @Book)    
@@ -207,17 +223,37 @@ handleDeleteAllBook = do
     pure ()
 
 
--- findProduct prodId = do 
---     select $ do
---         (prod :& food) <- 
---             from $ Table @Product 
---                 `LeftJoin` Table @Food
---                 `E.on` (\(prod :& food) -> 
---                         just (prod ^. ProductId) E.==. food ?. FoodProductId
---                     )
---         pure (prod ^. ProductId , food ?. FoodProductId)
+postLocationsInventoryR :: Handler Value
+postLocationsInventoryR = do
+    locationId <- lookupGetParam "locationid"
+    case locationId of
+        Nothing -> sendResponseStatus status404 ("that location was not found" :: Text)
+        Just locId -> do
+            case decimal locId of
+                Left fail -> sendResponseStatus status404 ("we couldnt parse that number" :: Text)
+                Right (theint, _) -> do
+                    productsAtLocation <- runDB $ selectList [ProductStockLocationId ==. (toSqlKey theint) ] []
+                    returnJson productsAtLocation
 
 -- transferAProdFromLocAtoB :: todo
--- transferAProdFromLocAtoB prodId locA locB = do
---     runDB $ do
---        maybeProd <- selectFirst [] []  
+-- place these args in json
+develTransferAProdFromLocAtoB prodId locB = do
+    runDB $ do
+        maybeProd <- updateWhere [ProductId ==. prodId] [ProductStockLocationId =. locB]
+        pure maybeProd
+
+data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
+-- so both these needs to be used with toSqKey 
+        productId :: Int64 ,
+        transferLocation :: Int64
+    }
+    deriving stock Generic
+    deriving anyclass FromJSON
+    deriving Show
+
+postTransferAProdFromLocAtoBR :: Handler Value
+postTransferAProdFromLocAtoBR = do
+    transfer :: TransferProdLocationFromAToBJson <- requireCheckJsonBody
+    let TransferProdLocationFromAToBJson {..} = transfer
+    void $ runDB $ updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferLocation)]
+    sendResponseStatus status201 ("UPDATE ATTEMPTED" :: Text)

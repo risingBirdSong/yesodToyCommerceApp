@@ -47,6 +47,9 @@ import Handler.Comment
 import Handler.Profile
 import DB.ExampleEsqueleto
 import Handler.Products
+import Myutils
+import Database.Persist.Sql (toSqlKey)
+
 -- import Debug.Trace
 
 -- This line actually creates our YesodDispatch instance. It is the second half
@@ -187,7 +190,7 @@ shutdownApp _ = return ()
 
 
 ---------------------------------------------
--- Functions for use in development with GHCi
+-- Functions for use in development / devel with GHCi
 ---------------------------------------------
 
 -- | Run a handler
@@ -203,17 +206,29 @@ db = handler . runDB
 
 -- callWharehouseNewRandomBook = handler postWharehouseNewRandomBook
 
--- myTodo bring this code back 
--- randomNewBookInWharehouse = handler $ postWharehouseNewRandomProductBy toBook generateFakeBook
--- randomNewFoodInWharehouse = handler $ postWharehouseNewRandomProduct toFood generateFakeFood
+-- initial data after deleting the database
+theWharehouse = handler makeMainWharehouse
 
--- -- so this works but is very slow
--- makeManyBooks = mapM_ (\_ -> handler $ postWharehouseNewRandomProductBy toBook generateFakeBook) [1..100] 
--- makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood generateFakeFood ) [1..100] 
+hawthorneStore = handler $ makeAStore (toSqlKey 2) "Hawthorne" 100 
+burnsideStore = handler $ makeAStore (toSqlKey 3) "Burnside" 100
+fremontStore = handler $ makeAStore (toSqlKey 4) "Fremont" 100
+
+
+-- myTodo bring this code back 
+randomNewBookInWharehouse = handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook
+randomNewFoodInWharehouse = handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood
+
+-- so this works but is very slow
+makeManyBooks = mapM_ (\_ -> handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook) [1..100] 
+makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood ) [1..100] 
 
 
 -- insert into stock_location (id, name) values (1, 'our main wharehouse');
 handleDeleteAllBooks = handler deleteAllBooks
 handleDeleteAllFoods = handler deleteAllFoods
-
+handleDeleteAllProducts = handler deleteAllProducts
 -- handleNewWharehousebook = handler $ postWharehouseAquiresProductR toBook
+
+-- storeInventory locNumber = handler $ locationsInventory (toSqlKey locNumber) 
+
+develTransferProdLocation prodId locId = handler $ develTransferAProdFromLocAtoB (toSqlKey prodId) (toSqlKey locId)

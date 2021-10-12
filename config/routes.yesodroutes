@@ -18,4 +18,7 @@
 
 /wharehouse-aquires-food WharehouseAquiresFoodR POST
 
+/locations-inventory LocationsInventoryR POST
+
+/transfer-prod-location TransferAProdFromLocAtoBR POST
 -- /wharehouse-product WhareHouseAcquiresGenericProductR POST
