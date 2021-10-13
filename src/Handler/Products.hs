@@ -279,4 +279,4 @@ postTransferListProdFromLocAtoBR = do
 
 
 -- myTodo updateWhere returns () but maybe there should be a version that returns whether it updated or not
-
+-- the function to do this is updateWhereCount 
