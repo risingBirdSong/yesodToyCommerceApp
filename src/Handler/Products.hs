@@ -257,3 +257,26 @@ postTransferAProdFromLocAtoBR = do
     let TransferProdLocationFromAToBJson {..} = transfer
     void $ runDB $ updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferLocation)]
     sendResponseStatus status201 ("UPDATE ATTEMPTED" :: Text)
+
+-- batch transfer, transferring a list of products from one location to another (like an equivalent for a truckload delivery from wharehouse to store)
+data TransferListProdLocationFromAToBJson = TransferListProdLocationFromAToBJson {
+-- so both these needs to be used with toSqKey 
+        productIds :: [Int64] ,
+        transferLocationForList :: Int64
+    }
+    deriving stock Generic
+    deriving anyclass FromJSON
+    deriving Show
+-- is there a better way to handle this batch update? it seems ok and I didn't see a custom function for it
+postTransferListProdFromLocAtoBR :: Handler Value 
+postTransferListProdFromLocAtoBR = do 
+    transferList :: TransferListProdLocationFromAToBJson <- requireCheckJsonBody
+    let TransferListProdLocationFromAToBJson {..} = transferList
+    void $ runDB $ do
+       void $ mapM_ (\prodId -> updateWhere [ProductId ==. (toSqlKey prodId)] [ProductStockLocationId =. (toSqlKey transferLocationForList)]) productIds
+    sendResponseStatus status201 ("MANY UPDATE ATTEMPTED" :: Text)
+
+
+
+-- myTodo updateWhere returns () but maybe there should be a version that returns whether it updated or not
+

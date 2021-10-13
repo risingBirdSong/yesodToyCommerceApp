@@ -22,3 +22,5 @@
 
 /transfer-prod-location TransferAProdFromLocAtoBR POST
 -- /wharehouse-product WhareHouseAcquiresGenericProductR POST
+
+/transfer-prod-list-location TransferListProdFromLocAtoBR POST
