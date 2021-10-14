@@ -24,6 +24,9 @@ import System.Random
 import Data.List ((!!))
 import DB.TransferProductsLocation
 import Data.Text.Read
+import Database.Persist.Sql
+import qualified Data.List as L
+
 -- import Database.Esqueleto.Experimental as E hiding (Value)
 -- import Database.Esqueleto.Experimental.From.Join
 
@@ -223,8 +226,8 @@ handleDeleteAllBook = do
     pure ()
 
 
-postLocationsInventoryR :: Handler Value
-postLocationsInventoryR = do
+getLocationsInventoryR :: Handler Value
+getLocationsInventoryR = do
     locationId <- lookupGetParam "locationid"
     case locationId of
         Nothing -> sendResponseStatus status404 ("that location was not found" :: Text)
@@ -245,24 +248,44 @@ develTransferAProdFromLocAtoB prodId locB = do
 data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 -- so both these needs to be used with toSqKey 
         productId :: Int64 ,
-        transferLocation :: Int64
+        transferOrigin :: Int64 , 
+        transferDestination :: Int64
     }
     deriving stock Generic
     deriving anyclass FromJSON
     deriving Show
 
+-- productAtLocation :: (MonadIO m, PersistQueryRead backend, BaseBackend backend ~ SqlBackend) =>
+--      Int64 -> Int64 -> ReaderT backend m (Maybe (Entity Product))
+
+productAtLocation :: Int64 -> Int64 -> DB (Maybe (Entity Product))
+productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. (toSqlKey productId), ProductStockLocationId ==. (toSqlKey transferOrigin)] []
+
 postTransferAProdFromLocAtoBR :: Handler Value
 postTransferAProdFromLocAtoBR = do
     transfer :: TransferProdLocationFromAToBJson <- requireCheckJsonBody
     let TransferProdLocationFromAToBJson {..} = transfer
-    void $ runDB $ updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferLocation)]
-    sendResponseStatus status201 ("UPDATE ATTEMPTED" :: Text)
+    -- probably around this point want to consider using esqueleto
+    allReturn@(ensureProdIsAtLocation, ensureDestExists,  nameOrigin, nameDest) <- runDB $ do 
+       ensureProdLoc <- productAtLocation productId transferOrigin
+       ensureDestinationExists <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+       nameOfOrigin <- selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+       nameOfDestination <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+       pure (ensureProdLoc, ensureDestinationExists,  nameOfOrigin, nameOfDestination)
+    case (ensureProdIsAtLocation, ensureDestExists,  nameOrigin, nameDest) of 
+        (Just prod, Just (destExist) , Just (Entity _ nameOrigin), Just (Entity _ nameDest)) -> do 
+            updated <- runDB $ updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferDestination)]
+            sendResponseStatus status201 ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest)   :: Text)
+        (Nothing, _, _, _) -> sendResponseStatus status404 ("a prod at that loc wasnt found " :: Text)
+        _ -> sendResponseStatus status404 ("hmm were not sure about those locations" :: Text)
+    -- void $ runDB $ updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferLocation)]
 
 -- batch transfer, transferring a list of products from one location to another (like an equivalent for a truckload delivery from wharehouse to store)
 data TransferListProdLocationFromAToBJson = TransferListProdLocationFromAToBJson {
 -- so both these needs to be used with toSqKey 
         productIds :: [Int64] ,
-        transferLocationForList :: Int64
+        transferOriginForList :: Int64 ,
+        transferDestinationForList :: Int64
     }
     deriving stock Generic
     deriving anyclass FromJSON
@@ -272,11 +295,13 @@ postTransferListProdFromLocAtoBR :: Handler Value
 postTransferListProdFromLocAtoBR = do 
     transferList :: TransferListProdLocationFromAToBJson <- requireCheckJsonBody
     let TransferListProdLocationFromAToBJson {..} = transferList
-    void $ runDB $ do
-       void $ mapM_ (\prodId -> updateWhere [ProductId ==. (toSqlKey prodId)] [ProductStockLocationId =. (toSqlKey transferLocationForList)]) productIds
-    sendResponseStatus status201 ("MANY UPDATE ATTEMPTED" :: Text)
 
-
+    attemptedUpdates <- runDB $ do
+        mapM (\prodId -> updateWhere [ProductId ==. (toSqlKey prodId)] [ProductStockLocationId =. (toSqlKey transferDestinationForList)]) productIds
+    return $ object ["attemptedUpdates" .= attemptedUpdates]
 
 -- myTodo updateWhere returns () but maybe there should be a version that returns whether it updated or not
 -- the function to do this is updateWhereCount 
+
+-- how can I do this is the selectList?
+-- selectList [transferOriginForList ==. ProductStockLocationId, ProductIn in productIds] []
