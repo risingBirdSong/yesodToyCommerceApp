@@ -45,6 +45,9 @@ dependencies:
 - esqueleto
 - fakedata
 - random
+- aeson-qq
+- transformers
+- mtl
 # remember these for future projs
 default-extensions:
 - RankNTypes

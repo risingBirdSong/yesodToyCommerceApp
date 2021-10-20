@@ -84,6 +84,7 @@ Customer json
 Store json
     stockLocationId StockLocationId
     name Text
+    UniqueName name
     balance Int
     deriving Eq
     deriving Show

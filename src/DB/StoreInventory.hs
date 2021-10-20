@@ -5,15 +5,17 @@ import Import hiding ((==.), on)
 import Database.Esqueleto.Experimental
 
 
-getStoreInventory :: StockLocationId -> DB [Entity Food]
-getStoreInventory locationId = do
-    select $ do
-        (foods :& prods) <- 
-            from $ Table @Food 
-            `InnerJoin` Table @Product 
-            `on` (\(food :& prods) -> 
-                    food ^. FoodProductId ==. prods ^. ProductId)
-        where_ (prods ^. ProductStockLocationId ==. val locationId)   
-        pure foods
             
-            
+-- just getting prod
+likeSelectList_Esq :: 
+    Key StockLocation ->
+    DB ([Entity Product])            
+likeSelectList_Esq loc = select $ do
+    prods <- from $ Table @Product
+    where_ ((prods ^. ProductStockLocationId) ==. (val loc))
+    pure prods 
+
+-- getProductAndNameOfLoc prodId locA = 
+--     select $ do
+--         prod <- from $ table @Product
+--         where_ ()  

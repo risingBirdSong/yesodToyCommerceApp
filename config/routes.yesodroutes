@@ -20,7 +20,10 @@
 
 /locations-inventory LocationsInventoryR GET
 
-/transfer-prod-location TransferAProdFromLocAtoBR POST
+/transfer-prod-location TransferAProdFromLocAtoB_MaybeR POST
 -- /wharehouse-product WhareHouseAcquiresGenericProductR POST
 
 /transfer-prod-list-location TransferListProdFromLocAtoBR POST
+
+/likeselect-list-esq LikeselectListEsq POST
+

@@ -5,6 +5,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE QuasiQuotes #-}
+
 -- {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 module Application
@@ -49,6 +51,9 @@ import DB.ExampleEsqueleto
 import Handler.Products
 import Myutils
 import Database.Persist.Sql (toSqlKey)
+import DB.StoreInventory
+import Data.Aeson
+import Data.Aeson.QQ
 
 -- import Debug.Trace
 
@@ -207,18 +212,20 @@ db = handler . runDB
 -- callWharehouseNewRandomBook = handler postWharehouseNewRandomBook
 
 -- initial data after deleting the database
-theWharehouse = handler makeMainWharehouse
 
+initialDoA = theWharehouse >> hawthorneStore >> burnsideStore >> fremontStore
+initialDoB = makeManyBooks >> makeManyFoods
+
+theWharehouse = handler makeMainWharehouse
 hawthorneStore = handler $ makeAStore (toSqlKey 2) "Hawthorne" 100 
 burnsideStore = handler $ makeAStore (toSqlKey 3) "Burnside" 100
 fremontStore = handler $ makeAStore (toSqlKey 4) "Fremont" 100
 
 
--- myTodo bring this code back 
 randomNewBookInWharehouse = handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook
 randomNewFoodInWharehouse = handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood
 
--- so this works but is very slow
+-- so this works but is very slow but thats ok for now
 makeManyBooks = mapM_ (\_ -> handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook) [1..100] 
 makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood ) [1..100] 
 
@@ -232,3 +239,4 @@ handleDeleteAllProducts = handler deleteAllProducts
 -- storeInventory locNumber = handler $ locationsInventory (toSqlKey locNumber) 
 
 develTransferProdLocation prodId locId = handler $ develTransferAProdFromLocAtoB (toSqlKey prodId) (toSqlKey locId)
+

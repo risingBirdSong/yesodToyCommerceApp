@@ -200,3 +200,7 @@ customers
 	balance
 	address
 	superuser bool 
+
+
+
+haskell-language-server-wrapper: callProcess: /home/myhumanname/.ghcup/bin/haskell-language-server-8.8.4 "-d" (exit -11): failed

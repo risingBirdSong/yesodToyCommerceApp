@@ -25,7 +25,12 @@ import Data.List ((!!))
 import DB.TransferProductsLocation
 import Data.Text.Read
 import Database.Persist.Sql
+import DB.StoreInventory
 import qualified Data.List as L
+import Data.Aeson
+import Control.Monad.Trans.Maybe
+
+
 
 -- import Database.Esqueleto.Experimental as E hiding (Value)
 -- import Database.Esqueleto.Experimental.From.Join
@@ -238,6 +243,7 @@ getLocationsInventoryR = do
                     productsAtLocation <- runDB $ selectList [ProductStockLocationId ==. (toSqlKey theint) ] []
                     returnJson productsAtLocation
 
+
 -- transferAProdFromLocAtoB :: todo
 -- place these args in json
 develTransferAProdFromLocAtoB prodId locB = do
@@ -261,23 +267,42 @@ data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 productAtLocation :: Int64 -> Int64 -> DB (Maybe (Entity Product))
 productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. (toSqlKey productId), ProductStockLocationId ==. (toSqlKey transferOrigin)] []
 
-postTransferAProdFromLocAtoBR :: Handler Value
-postTransferAProdFromLocAtoBR = do
-    transfer :: TransferProdLocationFromAToBJson <- requireCheckJsonBody
-    let TransferProdLocationFromAToBJson {..} = transfer
-    -- probably around this point want to consider using esqueleto
-    allReturn@(ensureProdIsAtLocation, ensureDestExists,  nameOrigin, nameDest) <- runDB $ do 
-       ensureProdLoc <- productAtLocation productId transferOrigin
-       ensureDestinationExists <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-       nameOfOrigin <- selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-       nameOfDestination <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-       pure (ensureProdLoc, ensureDestinationExists,  nameOfOrigin, nameOfDestination)
-    case (ensureProdIsAtLocation, ensureDestExists,  nameOrigin, nameDest) of 
-        (Just prod, Just (destExist) , Just (Entity _ nameOrigin), Just (Entity _ nameDest)) -> do 
-            updated <- runDB $ updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferDestination)]
-            sendResponseStatus status201 ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest)   :: Text)
-        (Nothing, _, _, _) -> sendResponseStatus status404 ("a prod at that loc wasnt found " :: Text)
-        _ -> sendResponseStatus status404 ("hmm were not sure about those locations" :: Text)
+postTransferAProdFromLocAtoB_R :: Handler Value
+postTransferAProdFromLocAtoB_R = do
+    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+    returnmessage :: Either Text Text <- runDB $ do 
+        ensureProdLoc <- productAtLocation productId transferOrigin
+        ensureDestinationExists <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+        nameOfOrigin <- selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+        nameOfDestination <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+        case (ensureProdLoc, ensureDestinationExists,  nameOfOrigin, nameOfDestination) of 
+            (Just prod, Just (destExist) , Just (Entity _ nameOrigin), Just (Entity _ nameDest)) -> do 
+                updated <- updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferDestination)]
+                pure $ Right ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest))
+            (_,_,_,_) -> pure $ Left ("check the product location and origin")
+    case returnmessage of
+        Right msg -> pure $ object ["Right" .= msg]
+        Left msg -> pure $ object ["Left" .= msg]
+
+
+postTransferAProdFromLocAtoB_MaybeR :: Handler Value
+postTransferAProdFromLocAtoB_MaybeR = do
+    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+    mSuccess  <- runDB $ runMaybeT $ do 
+        ensureProdLoc <- MaybeT $ productAtLocation productId transferOrigin
+        ensureDestinationExists <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+        nameOfOrigin <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+        nameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+        pure (ensureProdLoc, ensureDestinationExists, nameOfOrigin, nameOfDestination)
+    case mSuccess of
+        Nothing -> sendResponseStatus status400 ("something went wrong" :: Text)
+        Just (_,_,origin, destination) ->  pure $ object ["status" .= ("success" :: Text), "origin" .= origin, "destination" .= destination]
+
+
+ 
+    -- MaybeT 
+    -- fusion in Haskell works because of purity, but in a runDB with sql were working with effects and therefore fusion is much more difficult not necc. desired
+    -- just put the case of inside the runDB not outside 
     -- void $ runDB $ updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferLocation)]
 
 -- batch transfer, transferring a list of products from one location to another (like an equivalent for a truckload delivery from wharehouse to store)
@@ -303,5 +328,17 @@ postTransferListProdFromLocAtoBR = do
 -- myTodo updateWhere returns () but maybe there should be a version that returns whether it updated or not
 -- the function to do this is updateWhereCount 
 
--- how can I do this is the selectList?
--- selectList [transferOriginForList ==. ProductStockLocationId, ProductIn in productIds] []
+
+data EsqA = EsqA {
+        loc :: Int64
+    } deriving (Show, Eq, Generic)
+
+instance FromJSON EsqA
+instance ToJSON EsqA
+
+postLikeselectListEsq :: Handler Value
+postLikeselectListEsq = do 
+   EsqA {..} <- requireCheckJsonBody 
+   prodsAtLocation <- runDB $ likeSelectList_Esq (toSqlKey loc)
+   returnJson prodsAtLocation 
+
