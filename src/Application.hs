@@ -216,7 +216,7 @@ db = handler . runDB
 initialDoA = theWharehouse >> hawthorneStore >> burnsideStore >> fremontStore
 initialDoB = makeManyBooks >> makeManyFoods
 
-theWharehouse = handler makeMainWharehouse
+theWharehouse = handler makeMainWharehouseHandler
 hawthorneStore = handler $ makeAStore (toSqlKey 2) "Hawthorne" 100 
 burnsideStore = handler $ makeAStore (toSqlKey 3) "Burnside" 100
 fremontStore = handler $ makeAStore (toSqlKey 4) "Fremont" 100
@@ -226,8 +226,8 @@ randomNewBookInWharehouse = handler $ postWharehouseNewRandomProductBy toBook Bo
 randomNewFoodInWharehouse = handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood
 
 -- so this works but is very slow but thats ok for now
-makeManyBooks = mapM_ (\_ -> handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook) [1..100] 
-makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood ) [1..100] 
+makeManyBooks = mapM_ (\_ -> handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook) [1..20] 
+makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood ) [1..20] 
 
 
 -- insert into stock_location (id, name) values (1, 'our main wharehouse');

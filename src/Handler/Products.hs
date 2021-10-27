@@ -29,6 +29,16 @@ import DB.StoreInventory
 import qualified Data.List as L
 import Data.Aeson
 import Control.Monad.Trans.Maybe
+import Control.Monad.Validate
+import qualified Data.Validation as Vld
+import Control.Lens ((#))
+-- import Control.Monad.Fail
+
+
+
+
+
+
 
 
 
@@ -61,14 +71,31 @@ data CreateBook = CreateBook
     , pageCount :: Int
     , cost :: Int
     }
-    deriving stock Generic
+    deriving stock (Show, Generic)
     deriving anyclass FromJSON
-    deriving Show
+
+-- instance FromJSON CreateBook
+-- instance ToJSON CreateBook
+
+-- newtype Sum = Sum { getSum :: Int }
+--     deriving newtype FromJSON -- "1"
+
+--     deriving stock Generic
+--     deriving anyclass FromJSON -- "{ 'getSum': '1' }"
+
+-- class FromJSON a where
+--     parseJSON :: a -> Value
+--     parseJSON = genericParseJSON
+
+-- class IsSum a where
+--     isSum :: Bool
+--     isSum = True
 
 -- (genRandom FK.author) (genRandom FK.genre) (randomRIO (50, 500) :: IO Int) (randomRIO (5, 50) :: IO Int)
 
 -- TODO maybe try to pull the specific generateFakeBook and generateFakeFood into a generic helper function? 
 
+-- consider placing the random logic into monadRandom , more restricted
 generateFakeBook :: IO CreateBook
 generateFakeBook = do
     title <- genRandom FK.title
@@ -123,12 +150,17 @@ insertProductBy f productTypes now locationId = do
     prodId <- insert $ Product productTypes (toSqlKey locationId) now
     void $ insertBy (f prodId)
 
-makeMainWharehouse :: Handler () 
-makeMainWharehouse = do
-    runDB $ do    
-        wharehouseStocklocationId <- insert $ StockLocation "main wharehouse location"
-        mainWharehouse <- insert $ Wharehouse wharehouseStocklocationId "main wharehouse"
-        pure ()
+-- fakeHandlerR :: do
+--     runDB $ do
+--         makeMainWharehouse
+--         makeAStore
+makeMainWharehouseDB :: DB ()
+makeMainWharehouseDB = do
+    wharehouseStocklocationId <- insert $ StockLocation "main wharehouse location"
+    insert_ $ Wharehouse wharehouseStocklocationId "main wharehouse"
+
+makeMainWharehouseHandler :: Handler () 
+makeMainWharehouseHandler = runDB $ makeMainWharehouseDB
 
 makeAStore :: StockLocationId -> Text -> Int -> Handler () 
 makeAStore locId name balance = do 
@@ -251,6 +283,20 @@ develTransferAProdFromLocAtoB prodId locB = do
         maybeProd <- updateWhere [ProductId ==. prodId] [ProductStockLocationId =. locB]
         pure maybeProd
 
+-- data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
+-- -- so both these needs to be used with toSqKey 
+--         productId :: Key Product ,
+--         transferOrigin :: Key LocationId , 
+--         transferDestination :: Key LocationId
+--     }
+--  we might be able to derive stock for TransferProdLocationFromAToBJson with these more specific keys, but if not...
+-- instance FromJSON TransferProdLocationFromAToBJson where
+--   parseJSON = withObject "TransferProdLocationFromAToBJson" $ \v -> TransferProdLocationFromAToBJson
+--      <$> (toSqlKey <$> o .: "productId")
+--      <*> (toSqlKey <$> o .: "transferOrigin")
+-- ...
+
+
 data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 -- so both these needs to be used with toSqKey 
         productId :: Int64 ,
@@ -264,6 +310,7 @@ data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 -- productAtLocation :: (MonadIO m, PersistQueryRead backend, BaseBackend backend ~ SqlBackend) =>
 --      Int64 -> Int64 -> ReaderT backend m (Maybe (Entity Product))
 
+-- productAtLocation :: Key Product -> Key TransferOrigin -> DB (Maybe (Entity Product))
 productAtLocation :: Int64 -> Int64 -> DB (Maybe (Entity Product))
 productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. (toSqlKey productId), ProductStockLocationId ==. (toSqlKey transferOrigin)] []
 
@@ -280,23 +327,149 @@ postTransferAProdFromLocAtoB_R = do
                 updated <- updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferDestination)]
                 pure $ Right ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest))
             (_,_,_,_) -> pure $ Left ("check the product location and origin")
+    -- if this pattern happens again and again, then consider a custom ToJson Instance on a newtype wrapper for an Either,
+    -- could just return the json, probs not that ig of a deal
+    -- or just pattern matching like as a one off task that isn't repeated much
     case returnmessage of
         Right msg -> pure $ object ["Right" .= msg]
         Left msg -> pure $ object ["Left" .= msg]
 
 
-postTransferAProdFromLocAtoB_MaybeR :: Handler Value
-postTransferAProdFromLocAtoB_MaybeR = do
+postTransferAProdFromLocAtoB_ValidationR :: Handler Value 
+postTransferAProdFromLocAtoB_ValidationR = do 
+    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+    void <- runDB $ do
+        ensureProdLoc <- productAtLocation productId transferOrigin
+        ensureDestinationExists <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+        case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
+            Vld.Failure errs -> sendResponseStatus status400 (errs :: Text)
+            Vld.Success _ -> do 
+                nameOfOrigin <- selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+                nameOfDestination <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+                case (nameOfOrigin, nameOfDestination) of
+                    (Just (Entity _ nameOrigin) , Just (Entity _ nameDest)) -> do 
+                        updated <- updateWhere [ProductId ==. (toSqlKey (productId nameOrigin))] [ProductStockLocationId =. (toSqlKey (productStockLocationId nameDest))]
+                        sendResponseStatus status201 ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest) :: Text)
+                    (_) ->  sendResponseStatus status400 ("unexpected" :: Text)
+
+    undefined
+
+-- fromMaybe :: e -> Maybe a -> Validation e ()
+-- do
+--   fromMaybe "missing thing" mThing
+--   fromMaybe "missing other thing" mOtherThing
+
+maybeToValidation :: Text -> Maybe a -> Vld.Validation Text a 
+maybeToValidation e myb = case myb of
+    Nothing -> Vld._Failure # (" " <> e <> " ")
+    Just val -> Vld._Success # val 
+
+validateProdAtLocationAndDestinationExists prodLoc dest = 
+    maybeToValidation (pack "product isnt at origin") prodLoc <*
+    maybeToValidation (pack "destination doesnt exist") dest 
+
+validationExampeA = maybeToValidation (pack "error a") (Just 1) <*
+                    maybeToValidation (pack "error b") (Just 2) <*
+                    maybeToValidation (pack "error c") (Just 3) <*
+                    maybeToValidation (pack "error d") (Just 4) 
+                    -- Success 1
+
+
+validationExampeB = maybeToValidation (pack " error a ") (Nothing) <*
+                    maybeToValidation (pack " error b ") (Nothing) <*
+                    maybeToValidation (pack " error c ") (Just 3)  <*
+                    maybeToValidation (pack " error d ") (Nothing) 
+                    -- Failure " error a  error b error d "
+
+-- maybeToValidationA = 
+
+-- ensureProdAtLocationAndDestination :: 
+-- ensureProdAtLocationAndDestination productId transferOrigin = 
+--     case productAtLocation productId transferOrigin of
+--         Nothing -> _Failure # (pack "prod was not at location")
+--         Just val -> _Success # (val)
+
+
+
+
+postTransferAProdFromLocAtoB_MaybeTR :: Handler Value
+postTransferAProdFromLocAtoB_MaybeTR = do
     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
     mSuccess  <- runDB $ runMaybeT $ do 
         ensureProdLoc <- MaybeT $ productAtLocation productId transferOrigin
         ensureDestinationExists <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-        nameOfOrigin <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-        nameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-        pure (ensureProdLoc, ensureDestinationExists, nameOfOrigin, nameOfDestination)
+        -- pure updated
+        pure (ensureProdLoc, ensureDestinationExists)
     case mSuccess of
-        Nothing -> sendResponseStatus status400 ("something went wrong" :: Text)
-        Just (_,_,origin, destination) ->  pure $ object ["status" .= ("success" :: Text), "origin" .= origin, "destination" .= destination]
+        Nothing -> sendResponseStatus status400 ("check validation" :: Text)
+        -- Just (ensureProdLoc, ensureDestinationExists , origin, destination) -> do
+        Just _ -> do
+            myb <- runDB $ runMaybeT $ do
+                mybNameOfOrigin <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+                mybNameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+                pure (mybNameOfOrigin, mybNameOfDestination)
+            case myb of
+                Just ((Entity _ nameOfOrigin), (Entity _ nameOfDestination)) -> runDB $ do 
+                    updated <- updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferDestination)]
+                    sendResponseStatus status201 ("transfered" :: Text)
+                _ -> sendResponseStatus status400 ("something went wrong" :: Text)
+
+
+
+-- postTransferAProdFromLocAtoB_MaybeR :: Handler Value
+-- postTransferAProdFromLocAtoB_MaybeR = do
+--     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+--     mSuccess :: Either [String] a  <- runDB $ runValidateT $ do 
+--         disputeNothing "prod was not found" $ productAtLocation productId transferOrigin
+--         m a >>= (a -> Either l b)
+
+        -- eStatus <- runValidateT $ do my validations
+        -- case eStatus of
+        --   Left err -> Left err
+        --   Right _ -> Right <$> ... other sql stuff
+
+    -- f :: IO String
+    -- f = do
+    --   putStrLn "Hey" :: IO ()
+    --   pure "My String" :: IO String -- m a >>= (a -> m b) -- (>>) -- m a >>= (\() -> m b)
+
+    -- newtype MaybeT m a = MaybeT { runMaybeT :: m (Maybe a) }
+    -- newtype ValidateT e m a = ValidateT { getValidateT :: forall s. StateT (MonoMaybe s e) (ExceptT e m) a }
+    -- nameOfOrigin <- ValidateT $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+
+
+    --     ensureDestinationExists <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+        -- nameOfOrigin <- pure $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+        -- nameOfOrigin <- $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+        -- nameOfOrigin <- refuteNothing $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
+
+    --     nameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+    --     pure (ensureProdLoc, ensureDestinationExists, nameOfOrigin, nameOfDestination)
+    -- case mSuccess of
+    --     Nothing -> sendResponseStatus status400 ("something went wrong" :: Text)
+    --     Just (_,_,origin, destination) ->  pure $ object ["status" .= ("success" :: Text), "origin" .= origin, "destination" .= destination]
+
+-- disputeNothing :: (MonadValidate e m) => e -> Maybe a -> m ()
+-- disputeNothing err mVal = case mVal of
+--     Nothing -> dispute err -- refute :: e -> m a
+--     Just _ -> pure ()
+
+-- refuteNothing :: (MonadValidate e m) => e -> Maybe a -> m a
+-- refuteNothing err = fromMaybe (refute err)
+
+
+-- (<*>) :: m (a -> b) -> m a -> m b
+-- (<*>) mf ma = do
+    -- eval mf
+    -- eval ma
+    -- refute 1 *> refute 2
+    -- f a else Left errs
+
+-- disputeNothing returns a ValidateT
+-- disputeNothing take in an error message and a maybe, and case on the maybe
+-- Nothing is refuted
+-- Just is pured 
+
 
 
  

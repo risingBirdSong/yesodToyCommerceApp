@@ -48,6 +48,9 @@ dependencies:
 - aeson-qq
 - transformers
 - mtl
+- monad-validate
+- validation
+- lens
 # remember these for future projs
 default-extensions:
 - RankNTypes
