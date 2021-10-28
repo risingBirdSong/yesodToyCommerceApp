@@ -23,7 +23,7 @@ import           Yesod.Default.Config2       (applyEnvValue, configSettingsYml)
 import           Yesod.Default.Util          (WidgetFileSettings,
                                               widgetFileNoReload,
                                               widgetFileReload)
-
+import Model
 -- | Runtime settings to configure this application. These settings can be
 -- loaded from various sources: defaults, environment variables, config files,
 -- theoretically even a database.
@@ -63,7 +63,7 @@ data AppSettings = AppSettings
     , appAuthDummyLogin         :: Bool
     -- ^ Indicate if auth dummy login should be enabled.
     -- store the one Wharehouse ID in here so that we can read it out
-    , appWharehouseLocation :: Int64
+    , appWharehouseLocation :: Key StockLocation
     }
 
 instance FromJSON AppSettings where

@@ -14,7 +14,7 @@ module Handler.Products where
 import Import.Lifted hiding (Proxy)
 import Data.Proxy
 import Data.Coerce
-import Database.Persist.Sql (toSqlKey)
+-- import Database.Persist.Sql (toSqlKey)
 import Myutils
 import qualified Faker as FK
 import qualified Faker.Book as FK
@@ -141,13 +141,13 @@ data Products = Books Book | Foods Food
 -- inferredTypeInsertProduct :: (PersistStoreWrite backend, MonadIO m, PersistEntity record, PersistEntityBackend record ~ BaseBackend backend,  BaseBackend backend ~ SqlBackend) => (Key Product -> record) -> UTCTime -> Int64 -> ReaderT backend m ()
 
 -- insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> UTCTime -> Int64  ->  DB ()
-insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> ProductTypes -> UTCTime -> Int64  ->  DB ()
+insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> ProductTypes -> UTCTime -> Key StockLocation  ->  DB ()
 insertProduct f productType now locationId = do
-    prodId <- insert $ Product productType (toSqlKey locationId) now
+    prodId <- insert $ Product productType locationId now
     void $ insert (f prodId)
 
 insertProductBy f productTypes now locationId = do
-    prodId <- insert $ Product productTypes (toSqlKey locationId) now
+    prodId <- insert $ Product productTypes locationId now
     void $ insertBy (f prodId)
 
 -- fakeHandlerR :: do
@@ -263,18 +263,31 @@ handleDeleteAllBook = do
     pure ()
 
 
+-- was like this when using toSqlKey... so in API types the data were all INT64 instead of being example Key Product 
+-- getLocationsInventoryR :: Handler Value
+-- getLocationsInventoryR = do
+--     locationId <- lookupGetParam "locationid"
+--     case locationId of
+--         Nothing -> sendResponseStatus status404 ("that location was not found" :: Text)
+--         Just locId -> do
+--             case decimal locId of
+--                 Left fail -> sendResponseStatus status404 ("we couldnt parse that number" :: Text)
+--                 Right (theint, _) -> do
+--                     productsAtLocation <- runDB $ selectList [ProductStockLocationId ==. theint] []
+--                     returnJson productsAtLocation
+
+data LocationsInventoryAPI = LocationsInventoryAPI {
+    locationInventory :: Key StockLocation
+    } 
+    deriving stock Generic
+    deriving anyclass FromJSON
+    deriving Show
+
 getLocationsInventoryR :: Handler Value
 getLocationsInventoryR = do
-    locationId <- lookupGetParam "locationid"
-    case locationId of
-        Nothing -> sendResponseStatus status404 ("that location was not found" :: Text)
-        Just locId -> do
-            case decimal locId of
-                Left fail -> sendResponseStatus status404 ("we couldnt parse that number" :: Text)
-                Right (theint, _) -> do
-                    productsAtLocation <- runDB $ selectList [ProductStockLocationId ==. (toSqlKey theint) ] []
-                    returnJson productsAtLocation
-
+    LocationsInventoryAPI {..} <- requireCheckJsonBody  
+    productsAtLocation <- runDB $ selectList [ProductStockLocationId ==. locationInventory] []
+    returnJson productsAtLocation
 
 -- transferAProdFromLocAtoB :: todo
 -- place these args in json
@@ -299,9 +312,9 @@ develTransferAProdFromLocAtoB prodId locB = do
 
 data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 -- so both these needs to be used with toSqKey 
-        productId :: Int64 ,
-        transferOrigin :: Int64 , 
-        transferDestination :: Int64
+        productId :: Key Product ,
+        transferOrigin :: Key StockLocation , 
+        transferDestination :: Key StockLocation
     }
     deriving stock Generic
     deriving anyclass FromJSON
@@ -311,20 +324,20 @@ data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 --      Int64 -> Int64 -> ReaderT backend m (Maybe (Entity Product))
 
 -- productAtLocation :: Key Product -> Key TransferOrigin -> DB (Maybe (Entity Product))
-productAtLocation :: Int64 -> Int64 -> DB (Maybe (Entity Product))
-productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. (toSqlKey productId), ProductStockLocationId ==. (toSqlKey transferOrigin)] []
+productAtLocation :: Key Product -> Key StockLocation -> DB (Maybe (Entity Product))
+productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. productId, ProductStockLocationId ==. transferOrigin] []
 
 postTransferAProdFromLocAtoB_R :: Handler Value
 postTransferAProdFromLocAtoB_R = do
     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
     returnmessage :: Either Text Text <- runDB $ do 
         ensureProdLoc <- productAtLocation productId transferOrigin
-        ensureDestinationExists <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-        nameOfOrigin <- selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-        nameOfDestination <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+        ensureDestinationExists <- selectFirst [StockLocationId ==. transferDestination] []
+        nameOfOrigin <- selectFirst [StockLocationId ==. transferOrigin] []
+        nameOfDestination <- selectFirst [StockLocationId ==. transferDestination] []
         case (ensureProdLoc, ensureDestinationExists,  nameOfOrigin, nameOfDestination) of 
             (Just prod, Just (destExist) , Just (Entity _ nameOrigin), Just (Entity _ nameDest)) -> do 
-                updated <- updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferDestination)]
+                updated <- updateWhere [ProductId ==. productId] [ProductStockLocationId =. transferDestination]
                 pure $ Right ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest))
             (_,_,_,_) -> pure $ Left ("check the product location and origin")
     -- if this pattern happens again and again, then consider a custom ToJson Instance on a newtype wrapper for an Either,
@@ -335,24 +348,25 @@ postTransferAProdFromLocAtoB_R = do
         Left msg -> pure $ object ["Left" .= msg]
 
 
-postTransferAProdFromLocAtoB_ValidationR :: Handler Value 
-postTransferAProdFromLocAtoB_ValidationR = do 
-    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
-    void <- runDB $ do
-        ensureProdLoc <- productAtLocation productId transferOrigin
-        ensureDestinationExists <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-        case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
-            Vld.Failure errs -> sendResponseStatus status400 (errs :: Text)
-            Vld.Success _ -> do 
-                nameOfOrigin <- selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-                nameOfDestination <- selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-                case (nameOfOrigin, nameOfDestination) of
-                    (Just (Entity _ nameOrigin) , Just (Entity _ nameDest)) -> do 
-                        updated <- updateWhere [ProductId ==. (toSqlKey (productId nameOrigin))] [ProductStockLocationId =. (toSqlKey (productStockLocationId nameDest))]
-                        sendResponseStatus status201 ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest) :: Text)
-                    (_) ->  sendResponseStatus status400 ("unexpected" :: Text)
+-- myTODO bring this back
+-- postTransferAProdFromLocAtoB_ValidationR :: Handler Value 
+-- postTransferAProdFromLocAtoB_ValidationR = do 
+--     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+--     void <- runDB $ do
+--         ensureProdLoc <- productAtLocation productId transferOrigin
+--         ensureDestinationExists <- selectFirst [StockLocationId ==. ( transferDestination)] []
+--         case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
+--             Vld.Failure errs -> sendResponseStatus status400 (errs :: Text)
+--             Vld.Success _ -> do 
+--                 nameOfOrigin <- selectFirst [StockLocationId ==. ( transferOrigin)] []
+--                 nameOfDestination <- selectFirst [StockLocationId ==. ( transferDestination)] []
+--                 case (nameOfOrigin, nameOfDestination) of
+--                     (Just (Entity _ nameOrigin) , Just (Entity _ nameDest)) -> do 
+--                         updated <- updateWhere [ProductId ==. ( (productId nameOrigin))] [ProductStockLocationId =. ( (productStockLocationId nameDest))]
+--                         sendResponseStatus status201 ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest) :: Text)
+--                     (_) ->  sendResponseStatus status400 ("unexpected" :: Text)
 
-    undefined
+    
 
 -- fromMaybe :: e -> Maybe a -> Validation e ()
 -- do
@@ -397,7 +411,7 @@ postTransferAProdFromLocAtoB_MaybeTR = do
     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
     mSuccess  <- runDB $ runMaybeT $ do 
         ensureProdLoc <- MaybeT $ productAtLocation productId transferOrigin
-        ensureDestinationExists <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+        ensureDestinationExists <- MaybeT $ selectFirst [StockLocationId ==. transferDestination] []
         -- pure updated
         pure (ensureProdLoc, ensureDestinationExists)
     case mSuccess of
@@ -405,12 +419,12 @@ postTransferAProdFromLocAtoB_MaybeTR = do
         -- Just (ensureProdLoc, ensureDestinationExists , origin, destination) -> do
         Just _ -> do
             myb <- runDB $ runMaybeT $ do
-                mybNameOfOrigin <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-                mybNameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
+                mybNameOfOrigin <- MaybeT $ selectFirst [StockLocationId ==. transferOrigin] []
+                mybNameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. transferDestination] []
                 pure (mybNameOfOrigin, mybNameOfDestination)
             case myb of
                 Just ((Entity _ nameOfOrigin), (Entity _ nameOfDestination)) -> runDB $ do 
-                    updated <- updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferDestination)]
+                    updated <- updateWhere [ProductId ==. productId] [ProductStockLocationId =. transferDestination]
                     sendResponseStatus status201 ("transfered" :: Text)
                 _ -> sendResponseStatus status400 ("something went wrong" :: Text)
 
