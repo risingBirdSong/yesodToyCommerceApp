@@ -327,7 +327,6 @@ data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 productAtLocation :: Key Product -> Key StockLocation -> DB (Maybe (Entity Product))
 productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. productId, ProductStockLocationId ==. transferOrigin] []
 
--- sweet this works again!
 postTransferAProdFromLocAtoB_R :: Handler Value
 postTransferAProdFromLocAtoB_R = do
     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
@@ -348,24 +347,23 @@ postTransferAProdFromLocAtoB_R = do
         Right msg -> pure $ object ["Right" .= msg]
         Left msg -> pure $ object ["Left" .= msg]
 
-
+-- ProductStockLocationId ==. transferOrigin
 -- myTODO bring this back
--- postTransferAProdFromLocAtoB_ValidationR :: Handler Value 
--- postTransferAProdFromLocAtoB_ValidationR = do 
---     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
---     void <- runDB $ do
---         ensureProdLoc <- productAtLocation productId transferOrigin
---         ensureDestinationExists <- selectFirst [StockLocationId ==. ( transferDestination)] []
---         case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
---             Vld.Failure errs -> sendResponseStatus status400 (errs :: Text)
---             Vld.Success _ -> do 
---                 nameOfOrigin <- selectFirst [StockLocationId ==. ( transferOrigin)] []
---                 nameOfDestination <- selectFirst [StockLocationId ==. ( transferDestination)] []
---                 case (nameOfOrigin, nameOfDestination) of
---                     (Just (Entity _ nameOrigin) , Just (Entity _ nameDest)) -> do 
---                         updated <- updateWhere [ProductId ==. ( (productId nameOrigin))] [ProductStockLocationId =. ( (productStockLocationId nameDest))]
---                         sendResponseStatus status201 ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest) :: Text)
---                     (_) ->  sendResponseStatus status400 ("unexpected" :: Text)
+postTransferAProdFromLocAtoB_ValidationR :: Handler () 
+postTransferAProdFromLocAtoB_ValidationR = do 
+    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+    res <- runDB $ do
+        ensureProdLoc <- productAtLocation productId transferOrigin
+        ensureDestinationExists <- selectFirst [StockLocationId ==. ( transferDestination)] []
+        case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
+            Vld.Failure errs -> pure $ Left errs 
+            Vld.Success _ -> do 
+                putStrLn "hitting"
+                updated <- updateWhere [ProductId ==. productId] [ProductStockLocationId =. transferDestination]
+                pure $ Right "updated"
+    case res of
+        Left errs ->   sendResponseStatus status400 (errs :: Text)
+        Right _ ->     sendResponseStatus status201 ("The product was transferred from " :: Text) -- <> ( stockLocationName origin) <> " to " <> (stockLocationName destination)
 
     
 
