@@ -327,6 +327,7 @@ data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 productAtLocation :: Key Product -> Key StockLocation -> DB (Maybe (Entity Product))
 productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. productId, ProductStockLocationId ==. transferOrigin] []
 
+-- sweet this works again!
 postTransferAProdFromLocAtoB_R :: Handler Value
 postTransferAProdFromLocAtoB_R = do
     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
