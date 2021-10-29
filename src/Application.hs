@@ -213,6 +213,7 @@ db = handler . runDB
 
 -- initial data after deleting the database
 
+-- could just use do syntax to simplify
 initialDoA = theWharehouse >> hawthorneStore >> burnsideStore >> fremontStore
 initialDoB = makeManyBooks >> makeManyFoods
 
@@ -238,5 +239,5 @@ handleDeleteAllProducts = handler deleteAllProducts
 
 -- storeInventory locNumber = handler $ locationsInventory (toSqlKey locNumber) 
 
-develTransferProdLocation prodId locId = handler $ develTransferAProdFromLocAtoB (toSqlKey prodId) (toSqlKey locId)
+develTransferProdLocation prodId locId = db $ develTransferAProdFromLocAtoB (toSqlKey prodId) (toSqlKey locId)
 

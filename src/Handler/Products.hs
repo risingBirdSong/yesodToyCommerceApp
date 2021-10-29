@@ -291,10 +291,8 @@ getLocationsInventoryR = do
 
 -- transferAProdFromLocAtoB :: todo
 -- place these args in json
-develTransferAProdFromLocAtoB prodId locB = do
-    runDB $ do
-        maybeProd <- updateWhere [ProductId ==. prodId] [ProductStockLocationId =. locB]
-        pure maybeProd
+develTransferAProdFromLocAtoB prodId locB = updateWhere [ProductId ==. prodId] [ProductStockLocationId =. locB]
+        
 
 -- data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 -- -- so both these needs to be used with toSqKey 
@@ -347,31 +345,28 @@ postTransferAProdFromLocAtoB_R = do
         Right msg -> pure $ object ["Right" .= msg]
         Left msg -> pure $ object ["Left" .= msg]
 
--- ProductStockLocationId ==. transferOrigin
--- myTODO bring this back
+-- verifyAndUpdateLocation :: MonadUnliftIO m => TransferProdLocationFromAToBJson -> SqlPersistT m (Either Text Text)
+verifyAndUpdateLocation :: TransferProdLocationFromAToBJson -> DB (Either Text Text)
+verifyAndUpdateLocation (TransferProdLocationFromAToBJson {..}) = do
+    ensureProdLoc <- productAtLocation productId transferOrigin
+    ensureDestinationExists <- selectFirst [StockLocationId ==. transferDestination] []
+    case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
+        Vld.Failure errs -> do
+            pure $ Left errs 
+        Vld.Success _ -> do 
+            updated <- updateWhere [ProductId ==. productId, ProductStockLocationId ==. transferOrigin] [ProductStockLocationId =. transferDestination]
+            pure $ Right "updated"
+
+
 postTransferAProdFromLocAtoB_ValidationR :: Handler () 
 postTransferAProdFromLocAtoB_ValidationR = do 
-    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
-    res <- runDB $ do
-        ensureProdLoc <- productAtLocation productId transferOrigin
-        ensureDestinationExists <- selectFirst [StockLocationId ==. ( transferDestination)] []
-        case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
-            Vld.Failure errs -> pure $ Left errs 
-            Vld.Success _ -> do 
-                putStrLn "hitting"
-                updated <- updateWhere [ProductId ==. productId] [ProductStockLocationId =. transferDestination]
-                pure $ Right "updated"
+    transferProdLocationFromAToBJson <- requireCheckJsonBody
+    res <- runDB $ verifyAndUpdateLocation transferProdLocationFromAToBJson
     case res of
-        Left errs ->   sendResponseStatus status400 (errs :: Text)
-        Right _ ->     sendResponseStatus status201 ("The product was transferred from " :: Text) -- <> ( stockLocationName origin) <> " to " <> (stockLocationName destination)
+        Left errs -> sendResponseStatus status400 (errs :: Text)
+        Right _ ->   sendResponseStatus status201 ("The product was transferred" :: Text)
 
     
-
--- fromMaybe :: e -> Maybe a -> Validation e ()
--- do
---   fromMaybe "missing thing" mThing
---   fromMaybe "missing other thing" mOtherThing
-
 maybeToValidation :: Text -> Maybe a -> Vld.Validation Text a 
 maybeToValidation e myb = case myb of
     Nothing -> Vld._Failure # (" " <> e <> " ")
