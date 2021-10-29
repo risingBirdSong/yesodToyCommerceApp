@@ -32,31 +32,12 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Validate
 import qualified Data.Validation as Vld
 import Control.Lens ((#))
--- import Control.Monad.Fail
-
-
-
-
-
-
-
-
-
--- import Database.Esqueleto.Experimental as E hiding (Value)
--- import Database.Esqueleto.Experimental.From.Join
 
 data ABook = ABook {aBook :: Entity Book}
     deriving (Generic)
 
 instance FromJSON ABook
 instance ToJSON ABook
-
--- getStoreAquiresBookR :: Handler ()
--- getStoreAquiresBookR = do 
---     liftIO $ print "hitting" 
---     pure ()
-
--- so how can we abstract these two functions? Where they're mostly similar. Can we pass in the type and Constructor in as arguments?
 
 
 toBook :: CreateBook -> ProductId -> Book
@@ -74,26 +55,6 @@ data CreateBook = CreateBook
     deriving stock (Show, Generic)
     deriving anyclass FromJSON
 
--- instance FromJSON CreateBook
--- instance ToJSON CreateBook
-
--- newtype Sum = Sum { getSum :: Int }
---     deriving newtype FromJSON -- "1"
-
---     deriving stock Generic
---     deriving anyclass FromJSON -- "{ 'getSum': '1' }"
-
--- class FromJSON a where
---     parseJSON :: a -> Value
---     parseJSON = genericParseJSON
-
--- class IsSum a where
---     isSum :: Bool
---     isSum = True
-
--- (genRandom FK.author) (genRandom FK.genre) (randomRIO (50, 500) :: IO Int) (randomRIO (5, 50) :: IO Int)
-
--- TODO maybe try to pull the specific generateFakeBook and generateFakeFood into a generic helper function? 
 
 -- consider placing the random logic into monadRandom , more restricted
 generateFakeBook :: IO CreateBook
@@ -139,8 +100,6 @@ data Products = Books Book | Foods Food
 
 
 -- inferredTypeInsertProduct :: (PersistStoreWrite backend, MonadIO m, PersistEntity record, PersistEntityBackend record ~ BaseBackend backend,  BaseBackend backend ~ SqlBackend) => (Key Product -> record) -> UTCTime -> Int64 -> ReaderT backend m ()
-
--- insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> UTCTime -> Int64  ->  DB ()
 insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> ProductTypes -> UTCTime -> Key StockLocation  ->  DB ()
 insertProduct f productType now locationId = do
     prodId <- insert $ Product productType locationId now
@@ -150,10 +109,6 @@ insertProductBy f productTypes now locationId = do
     prodId <- insert $ Product productTypes locationId now
     void $ insertBy (f prodId)
 
--- fakeHandlerR :: do
---     runDB $ do
---         makeMainWharehouse
---         makeAStore
 makeMainWharehouseDB :: DB ()
 makeMainWharehouseDB = do
     wharehouseStocklocationId <- insert $ StockLocation "main wharehouse location"
@@ -169,7 +124,7 @@ makeAStore locId name balance = do
         insert $ Store locId name balance
     pure ()
 
-postWharehouseAquiresBookR :: Handler Value 
+postWharehouseAquiresBookR :: Handler Text 
 postWharehouseAquiresBookR = do
     gotYesod <- getYesod
     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
@@ -177,28 +132,6 @@ postWharehouseAquiresBookR = do
     apiBook :: CreateBook <- requireCheckJsonBody
     _ <- runDB $ insertProduct (toBook apiBook) BookProduct theTime whareHouseId
     sendResponseStatus status201 ("BOOK stocked in store" :: Text)
-
--- so this is using query params but maybe better to put this info in an apiJson?
--- postWhareHouseAcquiresGenericProductR :: Handler Value 
--- postWhareHouseAcquiresGenericProductR = do 
---     gotYesod <- getYesod
---     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod 
---     theTime <- getCurrentTime
---     --example of query parameters
---     getParameters <- reqGetParams <$> getRequest -- Params: [("product","book")]
---     let mybProduct = lookup "product" getParameters -- Just "book"
---     case mybProduct of
---         Nothing -> sendResponseStatus status201 ("BOOK stocked in store" :: Text)
---         Just "book" -> do
---             apiBook :: CreateBook <- requireCheckJsonBody  
---             _ <- runDB $ insertProduct (toBook apiBook) theTime whareHouseId
---             sendResponseStatus status201 ("book inserted into wharehouse" :: Text)
-
---         Just "food" -> do
---             apiFood :: CreateFood <- requireCheckJsonBody
---             _ <- runDB $ insertProduct (toFood apiFood) theTime whareHouseId
---             sendResponseStatus status201 ("food inserted into wharehouse" :: Text)
-
 
 -- myTodo bring this back
 postWharehouseAquiresFoodR :: Handler Value 
@@ -232,49 +165,26 @@ postWharehouseNewRandomProduct toProduct theProductType generateRandomFakeProduc
 
 -- SqlPersistT m ~ ReaderT SqlBackend m
 -- type SqlPersistT = ReaderT SqlBackend
-deleteAllBooks' :: MonadIO m => ReaderT SqlBackend m  ()
+-- deleteAllBooks' :: MonadIO m => ReaderT SqlBackend m  ()
+deleteAllBooks' :: DB ()
 deleteAllBooks' = deleteWhere ([] :: [Filter Book])
 
-deleteAllBooks :: Handler ()
-deleteAllBooks = runDB $ deleteWhere ([] :: [Filter Book])
+deleteAllBooks :: DB ()
+deleteAllBooks = deleteWhere ([] :: [Filter Book])
 
 
-deleteAllFoods :: Handler ()
-deleteAllFoods = runDB $ deleteWhere ([] :: [Filter Food])
+deleteAllFoods :: DB ()
+deleteAllFoods = deleteWhere ([] :: [Filter Food])
 
-deleteAllProducts :: Handler ()
-deleteAllProducts = runDB $ deleteWhere ([] :: [Filter Product])
-
-
--- deleteTypeOfProduct :: forall a m. (PersistEntityBackend a ~ SqlBackend, MonadIO m, PersistEntity a)=> Proxy a -> SqlPersistT m ()
--- deleteTypeOfProduct _ = deleteWhere ([] :: [Filter a])
-
--- deleteTypeOfProduct' (Proxy :: Proxy Book)
--- deleteTypeOfProduct' (Proxy @Book)    
+deleteAllProducts :: DB ()
+deleteAllProducts = deleteWhere ([] :: [Filter Product])
 
 deleteTypeOfProduct'' :: forall a m. (PersistEntityBackend a ~ SqlBackend, MonadIO m, PersistEntity a) => SqlPersistT m ()
 deleteTypeOfProduct'' = deleteWhere @_ @_ @a []
 
 -- call this in src/Application.hs 
-handleDeleteAllBook :: Handler ()
-handleDeleteAllBook = do
-    _ <- runDB $ deleteTypeOfProduct'' @Book
-    liftIO $ putStrLn "i just deleted all books"
-    pure ()
-
-
--- was like this when using toSqlKey... so in API types the data were all INT64 instead of being example Key Product 
--- getLocationsInventoryR :: Handler Value
--- getLocationsInventoryR = do
---     locationId <- lookupGetParam "locationid"
---     case locationId of
---         Nothing -> sendResponseStatus status404 ("that location was not found" :: Text)
---         Just locId -> do
---             case decimal locId of
---                 Left fail -> sendResponseStatus status404 ("we couldnt parse that number" :: Text)
---                 Right (theint, _) -> do
---                     productsAtLocation <- runDB $ selectList [ProductStockLocationId ==. theint] []
---                     returnJson productsAtLocation
+handleDeleteAllBook :: DB ()
+handleDeleteAllBook = deleteTypeOfProduct'' @Book
 
 data LocationsInventoryAPI = LocationsInventoryAPI {
     locationInventory :: Key StockLocation
@@ -294,20 +204,6 @@ getLocationsInventoryR = do
 develTransferAProdFromLocAtoB prodId locB = updateWhere [ProductId ==. prodId] [ProductStockLocationId =. locB]
         
 
--- data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
--- -- so both these needs to be used with toSqKey 
---         productId :: Key Product ,
---         transferOrigin :: Key LocationId , 
---         transferDestination :: Key LocationId
---     }
---  we might be able to derive stock for TransferProdLocationFromAToBJson with these more specific keys, but if not...
--- instance FromJSON TransferProdLocationFromAToBJson where
---   parseJSON = withObject "TransferProdLocationFromAToBJson" $ \v -> TransferProdLocationFromAToBJson
---      <$> (toSqlKey <$> o .: "productId")
---      <*> (toSqlKey <$> o .: "transferOrigin")
--- ...
-
-
 data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 -- so both these needs to be used with toSqKey 
         productId :: Key Product ,
@@ -318,10 +214,6 @@ data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
     deriving anyclass FromJSON
     deriving Show
 
--- productAtLocation :: (MonadIO m, PersistQueryRead backend, BaseBackend backend ~ SqlBackend) =>
---      Int64 -> Int64 -> ReaderT backend m (Maybe (Entity Product))
-
--- productAtLocation :: Key Product -> Key TransferOrigin -> DB (Maybe (Entity Product))
 productAtLocation :: Key Product -> Key StockLocation -> DB (Maybe (Entity Product))
 productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. productId, ProductStockLocationId ==. transferOrigin] []
 
@@ -339,7 +231,7 @@ postTransferAProdFromLocAtoB_R = do
                 pure $ Right ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest))
             (_,_,_,_) -> pure $ Left ("check the product location and origin")
     -- if this pattern happens again and again, then consider a custom ToJson Instance on a newtype wrapper for an Either,
-    -- could just return the json, probs not that ig of a deal
+    -- could just return the json, probs not that big of a deal
     -- or just pattern matching like as a one off task that isn't repeated much
     case returnmessage of
         Right msg -> pure $ object ["Right" .= msg]
@@ -357,6 +249,16 @@ verifyAndUpdateLocation (TransferProdLocationFromAToBJson {..}) = do
             updated <- updateWhere [ProductId ==. productId, ProductStockLocationId ==. transferOrigin] [ProductStockLocationId =. transferDestination]
             pure $ Right "updated"
 
+verifyAndUpdateLocationWithRegularArgs :: Key Product -> Key StockLocation -> Key StockLocation -> DB (Either Text Text)
+verifyAndUpdateLocationWithRegularArgs productId transferOrigin transferDestination = do 
+    ensureProdLoc <- productAtLocation productId transferOrigin
+    ensureDestinationExists <- selectFirst [StockLocationId ==. transferDestination] []
+    case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
+        Vld.Failure errs -> do
+            pure $ Left errs 
+        Vld.Success _ -> do 
+            updated <- updateWhere [ProductId ==. productId, ProductStockLocationId ==. transferOrigin] [ProductStockLocationId =. transferDestination]
+            pure $ Right "updated"
 
 postTransferAProdFromLocAtoB_ValidationR :: Handler () 
 postTransferAProdFromLocAtoB_ValidationR = do 
@@ -389,17 +291,6 @@ validationExampeB = maybeToValidation (pack " error a ") (Nothing) <*
                     maybeToValidation (pack " error d ") (Nothing) 
                     -- Failure " error a  error b error d "
 
--- maybeToValidationA = 
-
--- ensureProdAtLocationAndDestination :: 
--- ensureProdAtLocationAndDestination productId transferOrigin = 
---     case productAtLocation productId transferOrigin of
---         Nothing -> _Failure # (pack "prod was not at location")
---         Just val -> _Success # (val)
-
-
-
-
 postTransferAProdFromLocAtoB_MaybeTR :: Handler Value
 postTransferAProdFromLocAtoB_MaybeTR = do
     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
@@ -423,75 +314,12 @@ postTransferAProdFromLocAtoB_MaybeTR = do
                 _ -> sendResponseStatus status400 ("something went wrong" :: Text)
 
 
-
--- postTransferAProdFromLocAtoB_MaybeR :: Handler Value
--- postTransferAProdFromLocAtoB_MaybeR = do
---     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
---     mSuccess :: Either [String] a  <- runDB $ runValidateT $ do 
---         disputeNothing "prod was not found" $ productAtLocation productId transferOrigin
---         m a >>= (a -> Either l b)
-
-        -- eStatus <- runValidateT $ do my validations
-        -- case eStatus of
-        --   Left err -> Left err
-        --   Right _ -> Right <$> ... other sql stuff
-
-    -- f :: IO String
-    -- f = do
-    --   putStrLn "Hey" :: IO ()
-    --   pure "My String" :: IO String -- m a >>= (a -> m b) -- (>>) -- m a >>= (\() -> m b)
-
-    -- newtype MaybeT m a = MaybeT { runMaybeT :: m (Maybe a) }
-    -- newtype ValidateT e m a = ValidateT { getValidateT :: forall s. StateT (MonoMaybe s e) (ExceptT e m) a }
-    -- nameOfOrigin <- ValidateT $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-
-
-    --     ensureDestinationExists <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-        -- nameOfOrigin <- pure $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-        -- nameOfOrigin <- $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-        -- nameOfOrigin <- refuteNothing $ selectFirst [StockLocationId ==. (toSqlKey transferOrigin)] []
-
-    --     nameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. (toSqlKey transferDestination)] []
-    --     pure (ensureProdLoc, ensureDestinationExists, nameOfOrigin, nameOfDestination)
-    -- case mSuccess of
-    --     Nothing -> sendResponseStatus status400 ("something went wrong" :: Text)
-    --     Just (_,_,origin, destination) ->  pure $ object ["status" .= ("success" :: Text), "origin" .= origin, "destination" .= destination]
-
--- disputeNothing :: (MonadValidate e m) => e -> Maybe a -> m ()
--- disputeNothing err mVal = case mVal of
---     Nothing -> dispute err -- refute :: e -> m a
---     Just _ -> pure ()
-
--- refuteNothing :: (MonadValidate e m) => e -> Maybe a -> m a
--- refuteNothing err = fromMaybe (refute err)
-
-
--- (<*>) :: m (a -> b) -> m a -> m b
--- (<*>) mf ma = do
-    -- eval mf
-    -- eval ma
-    -- refute 1 *> refute 2
-    -- f a else Left errs
-
--- disputeNothing returns a ValidateT
--- disputeNothing take in an error message and a maybe, and case on the maybe
--- Nothing is refuted
--- Just is pured 
-
-
-
- 
-    -- MaybeT 
-    -- fusion in Haskell works because of purity, but in a runDB with sql were working with effects and therefore fusion is much more difficult not necc. desired
-    -- just put the case of inside the runDB not outside 
-    -- void $ runDB $ updateWhere [ProductId ==. (toSqlKey productId)] [ProductStockLocationId =. (toSqlKey transferLocation)]
-
 -- batch transfer, transferring a list of products from one location to another (like an equivalent for a truckload delivery from wharehouse to store)
 data TransferListProdLocationFromAToBJson = TransferListProdLocationFromAToBJson {
 -- so both these needs to be used with toSqKey 
-        productIds :: [Int64] ,
-        transferOriginForList :: Int64 ,
-        transferDestinationForList :: Int64
+        productIds :: [Key Product] ,
+        transferOriginForList :: Key StockLocation ,
+        transferDestinationForList :: Key StockLocation
     }
     deriving stock Generic
     deriving anyclass FromJSON
@@ -501,14 +329,12 @@ postTransferListProdFromLocAtoBR :: Handler Value
 postTransferListProdFromLocAtoBR = do 
     transferList :: TransferListProdLocationFromAToBJson <- requireCheckJsonBody
     let TransferListProdLocationFromAToBJson {..} = transferList
-
     attemptedUpdates <- runDB $ do
-        mapM (\prodId -> updateWhere [ProductId ==. (toSqlKey prodId)] [ProductStockLocationId =. (toSqlKey transferDestinationForList)]) productIds
+        mapM (\prodId -> verifyAndUpdateLocationWithRegularArgs prodId transferOriginForList transferDestinationForList ) productIds
     return $ object ["attemptedUpdates" .= attemptedUpdates]
 
 -- myTodo updateWhere returns () but maybe there should be a version that returns whether it updated or not
 -- the function to do this is updateWhereCount 
-
 
 data EsqA = EsqA {
         loc :: Int64

@@ -28,7 +28,7 @@
                                  
 -- /wharehouse-product WhareHouseAcquiresGenericProductR POST
 
--- /transfer-prod-list-location TransferListProdFromLocAtoBR POST
+/transfer-prod-list-location TransferListProdFromLocAtoBR POST
     
 
 /likeselect-list-esq LikeselectListEsq POST

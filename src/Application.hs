@@ -232,9 +232,9 @@ makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood Foo
 
 
 -- insert into stock_location (id, name) values (1, 'our main wharehouse');
-handleDeleteAllBooks = handler deleteAllBooks
-handleDeleteAllFoods = handler deleteAllFoods
-handleDeleteAllProducts = handler deleteAllProducts
+handleDeleteAllBooks = db deleteAllBooks
+handleDeleteAllFoods = db deleteAllFoods
+handleDeleteAllProducts = db deleteAllProducts
 -- handleNewWharehousebook = handler $ postWharehouseAquiresProductR toBook
 
 -- storeInventory locNumber = handler $ locationsInventory (toSqlKey locNumber) 
