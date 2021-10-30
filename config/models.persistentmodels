@@ -68,12 +68,19 @@ Book json
     deriving Eq
     deriving Show
 
-
+-- myTodo is there a way to constrain and make sure that ProductTypes are consistent across tables
 Product json
     productType ProductTypes  
     stockLocationId StockLocationId
     acquired UTCTime
-    
+
+ProductHistory json
+    product ProductId
+    stocklocation StockLocationId
+    transferTime UTCTime
+    -- so keep this false while it's in our system and then turn to true when it's sold
+    soldToCustomer Bool default=False
+
 
 Customer json
     name Text
@@ -100,11 +107,13 @@ StockLocation json
     deriving Eq
     deriving Show
 
-Order json
+CustomerOrder json
 	productId ProductId
 	buyerId CustomerId
 	stockLocationId StockLocationId
 	status OrderStatus
+    purchasedAt UTCTime
+    fulfilledAt UTCTime
     deriving Eq
     deriving Show
 

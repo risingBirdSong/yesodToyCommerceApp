@@ -48,7 +48,7 @@ import Handler.Home
 import Handler.Comment
 import Handler.Profile
 import DB.ExampleEsqueleto
-import Handler.Products
+import Handler.Catchall
 import Myutils
 import Database.Persist.Sql (toSqlKey)
 import DB.StoreInventory

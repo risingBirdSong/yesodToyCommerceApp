@@ -9,7 +9,7 @@
 
 
 
-module Handler.Products where
+module Handler.Catchall where
 
 import Import.Lifted hiding (Proxy)
 import Data.Proxy
@@ -32,6 +32,8 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Validate
 import qualified Data.Validation as Vld
 import Control.Lens ((#))
+import Control.Concurrent
+
 
 data ABook = ABook {aBook :: Entity Book}
     deriving (Generic)
@@ -249,21 +251,23 @@ verifyAndUpdateLocation (TransferProdLocationFromAToBJson {..}) = do
             updated <- updateWhere [ProductId ==. productId, ProductStockLocationId ==. transferOrigin] [ProductStockLocationId =. transferDestination]
             pure $ Right "updated"
 
-verifyAndUpdateLocationWithRegularArgs :: Key Product -> Key StockLocation -> Key StockLocation -> DB (Either Text Text)
-verifyAndUpdateLocationWithRegularArgs productId transferOrigin transferDestination = do 
+verifyAndUpdateLocationWithRegularArgs :: Key Product -> Key StockLocation -> Key StockLocation -> UTCTime -> DB (Either Text Text)
+verifyAndUpdateLocationWithRegularArgs productId transferOrigin transferDestination thetime = do 
     ensureProdLoc <- productAtLocation productId transferOrigin
     ensureDestinationExists <- selectFirst [StockLocationId ==. transferDestination] []
     case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
         Vld.Failure errs -> do
             pure $ Left errs 
         Vld.Success _ -> do 
+            inserted <- insert $ ProductHistory productId transferDestination thetime False
             updated <- updateWhere [ProductId ==. productId, ProductStockLocationId ==. transferOrigin] [ProductStockLocationId =. transferDestination]
             pure $ Right "updated"
 
 postTransferAProdFromLocAtoB_ValidationR :: Handler () 
 postTransferAProdFromLocAtoB_ValidationR = do 
-    transferProdLocationFromAToBJson <- requireCheckJsonBody
-    res <- runDB $ verifyAndUpdateLocation transferProdLocationFromAToBJson
+    thetime <- liftIO $ getCurrentTime
+    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+    res <- runDB $ verifyAndUpdateLocationWithRegularArgs productId transferOrigin transferDestination thetime
     case res of
         Left errs -> sendResponseStatus status400 (errs :: Text)
         Right _ ->   sendResponseStatus status201 ("The product was transferred" :: Text)
@@ -277,42 +281,6 @@ maybeToValidation e myb = case myb of
 validateProdAtLocationAndDestinationExists prodLoc dest = 
     maybeToValidation (pack "product isnt at origin") prodLoc <*
     maybeToValidation (pack "destination doesnt exist") dest 
-
-validationExampeA = maybeToValidation (pack "error a") (Just 1) <*
-                    maybeToValidation (pack "error b") (Just 2) <*
-                    maybeToValidation (pack "error c") (Just 3) <*
-                    maybeToValidation (pack "error d") (Just 4) 
-                    -- Success 1
-
-
-validationExampeB = maybeToValidation (pack " error a ") (Nothing) <*
-                    maybeToValidation (pack " error b ") (Nothing) <*
-                    maybeToValidation (pack " error c ") (Just 3)  <*
-                    maybeToValidation (pack " error d ") (Nothing) 
-                    -- Failure " error a  error b error d "
-
-postTransferAProdFromLocAtoB_MaybeTR :: Handler Value
-postTransferAProdFromLocAtoB_MaybeTR = do
-    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
-    mSuccess  <- runDB $ runMaybeT $ do 
-        ensureProdLoc <- MaybeT $ productAtLocation productId transferOrigin
-        ensureDestinationExists <- MaybeT $ selectFirst [StockLocationId ==. transferDestination] []
-        -- pure updated
-        pure (ensureProdLoc, ensureDestinationExists)
-    case mSuccess of
-        Nothing -> sendResponseStatus status400 ("check validation" :: Text)
-        -- Just (ensureProdLoc, ensureDestinationExists , origin, destination) -> do
-        Just _ -> do
-            myb <- runDB $ runMaybeT $ do
-                mybNameOfOrigin <- MaybeT $ selectFirst [StockLocationId ==. transferOrigin] []
-                mybNameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. transferDestination] []
-                pure (mybNameOfOrigin, mybNameOfDestination)
-            case myb of
-                Just ((Entity _ nameOfOrigin), (Entity _ nameOfDestination)) -> runDB $ do 
-                    updated <- updateWhere [ProductId ==. productId] [ProductStockLocationId =. transferDestination]
-                    sendResponseStatus status201 ("transfered" :: Text)
-                _ -> sendResponseStatus status400 ("something went wrong" :: Text)
-
 
 -- batch transfer, transferring a list of products from one location to another (like an equivalent for a truckload delivery from wharehouse to store)
 data TransferListProdLocationFromAToBJson = TransferListProdLocationFromAToBJson {
@@ -329,8 +297,9 @@ postTransferListProdFromLocAtoBR :: Handler Value
 postTransferListProdFromLocAtoBR = do 
     transferList :: TransferListProdLocationFromAToBJson <- requireCheckJsonBody
     let TransferListProdLocationFromAToBJson {..} = transferList
+    thetime <- liftIO getCurrentTime
     attemptedUpdates <- runDB $ do
-        mapM (\prodId -> verifyAndUpdateLocationWithRegularArgs prodId transferOriginForList transferDestinationForList ) productIds
+        mapM (\prodId -> verifyAndUpdateLocationWithRegularArgs prodId transferOriginForList transferDestinationForList thetime) productIds
     return $ object ["attemptedUpdates" .= attemptedUpdates]
 
 -- myTodo updateWhere returns () but maybe there should be a version that returns whether it updated or not
@@ -348,4 +317,6 @@ postLikeselectListEsq = do
    EsqA {..} <- requireCheckJsonBody 
    prodsAtLocation <- runDB $ likeSelectList_Esq (toSqlKey loc)
    returnJson prodsAtLocation 
+
+
 

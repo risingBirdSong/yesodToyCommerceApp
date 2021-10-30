@@ -122,3 +122,39 @@ alternative ways to do this instead of type application using Proxies
 --      <*> (toSqlKey <$> o .: "transferOrigin")
 -- ...
 
+
+validationExampeA = maybeToValidation (pack "error a") (Just 1) <*
+                    maybeToValidation (pack "error b") (Just 2) <*
+                    maybeToValidation (pack "error c") (Just 3) <*
+                    maybeToValidation (pack "error d") (Just 4) 
+                    -- Success 1
+
+
+validationExampeB = maybeToValidation (pack " error a ") (Nothing) <*
+                    maybeToValidation (pack " error b ") (Nothing) <*
+                    maybeToValidation (pack " error c ") (Just 3)  <*
+                    maybeToValidation (pack " error d ") (Nothing) 
+                    -- Failure " error a  error b error d "
+
+
+postTransferAProdFromLocAtoB_MaybeTR :: Handler Value
+postTransferAProdFromLocAtoB_MaybeTR = do
+    TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+    mSuccess  <- runDB $ runMaybeT $ do 
+        ensureProdLoc <- MaybeT $ productAtLocation productId transferOrigin
+        ensureDestinationExists <- MaybeT $ selectFirst [StockLocationId ==. transferDestination] []
+        -- pure updated
+        pure (ensureProdLoc, ensureDestinationExists)
+    case mSuccess of
+        Nothing -> sendResponseStatus status400 ("check validation" :: Text)
+        -- Just (ensureProdLoc, ensureDestinationExists , origin, destination) -> do
+        Just _ -> do
+            myb <- runDB $ runMaybeT $ do
+                mybNameOfOrigin <- MaybeT $ selectFirst [StockLocationId ==. transferOrigin] []
+                mybNameOfDestination <- MaybeT $ selectFirst [StockLocationId ==. transferDestination] []
+                pure (mybNameOfOrigin, mybNameOfDestination)
+            case myb of
+                Just ((Entity _ nameOfOrigin), (Entity _ nameOfDestination)) -> runDB $ do 
+                    updated <- updateWhere [ProductId ==. productId] [ProductStockLocationId =. transferDestination]
+                    sendResponseStatus status201 ("transfered" :: Text)
+                _ -> sendResponseStatus status400 ("something went wrong" :: Text)
