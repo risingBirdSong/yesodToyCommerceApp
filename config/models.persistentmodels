@@ -80,7 +80,8 @@ ProductHistory json
     transferTime UTCTime
     -- so keep this false while it's in our system and then turn to true when it's sold
     soldToCustomer Bool default=False
-
+    deriving Eq
+    deriving Show
 
 Customer json
     name Text

@@ -101,6 +101,7 @@ genRandom =  FK.generateWithSettings $ FK.setNonDeterministic FK.defaultFakerSet
 data Products = Books Book | Foods Food
 
 
+
 -- inferredTypeInsertProduct :: (PersistStoreWrite backend, MonadIO m, PersistEntity record, PersistEntityBackend record ~ BaseBackend backend,  BaseBackend backend ~ SqlBackend) => (Key Product -> record) -> UTCTime -> Int64 -> ReaderT backend m ()
 insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> ProductTypes -> UTCTime -> Key StockLocation  ->  DB ()
 insertProduct f productType now locationId = do
@@ -195,6 +196,22 @@ data LocationsInventoryAPI = LocationsInventoryAPI {
     deriving anyclass FromJSON
     deriving Show
 
+data ProductKeyAPI = ProductKeyAPI {
+    productKeyAPI :: Key Product 
+    }  
+    deriving stock Generic
+    deriving anyclass FromJSON
+    deriving Show
+
+-- probs delete this 
+-- data ProductHistoryListAPI = ProductHistoryListAPI {
+--     prodHists :: [Entity ProductHistory] 
+--     } 
+--     deriving stock Generic
+--     deriving anyclass FromJSON
+--     deriving anyclass ToJSON
+--     deriving Show
+
 getLocationsInventoryR :: Handler Value
 getLocationsInventoryR = do
     LocationsInventoryAPI {..} <- requireCheckJsonBody  
@@ -219,9 +236,11 @@ data TransferProdLocationFromAToBJson = TransferProdLocationFromAToBJson {
 productAtLocation :: Key Product -> Key StockLocation -> DB (Maybe (Entity Product))
 productAtLocation productId  transferOrigin = selectFirst [ProductId  ==. productId, ProductStockLocationId ==. transferOrigin] []
 
+-- TRANSFER!
 postTransferAProdFromLocAtoB_R :: Handler Value
 postTransferAProdFromLocAtoB_R = do
     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
+    thetime <- getCurrentTime
     returnmessage :: Either Text Text <- runDB $ do 
         ensureProdLoc <- productAtLocation productId transferOrigin
         ensureDestinationExists <- selectFirst [StockLocationId ==. transferDestination] []
@@ -230,6 +249,7 @@ postTransferAProdFromLocAtoB_R = do
         case (ensureProdLoc, ensureDestinationExists,  nameOfOrigin, nameOfDestination) of 
             (Just prod, Just (destExist) , Just (Entity _ nameOrigin), Just (Entity _ nameDest)) -> do 
                 updated <- updateWhere [ProductId ==. productId] [ProductStockLocationId =. transferDestination]
+                inserted <- addToProductHistory productId transferDestination thetime False
                 pure $ Right ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest))
             (_,_,_,_) -> pure $ Left ("check the product location and origin")
     -- if this pattern happens again and again, then consider a custom ToJson Instance on a newtype wrapper for an Either,
@@ -259,10 +279,11 @@ verifyAndUpdateLocationWithRegularArgs productId transferOrigin transferDestinat
         Vld.Failure errs -> do
             pure $ Left errs 
         Vld.Success _ -> do 
-            inserted <- insert $ ProductHistory productId transferDestination thetime False
+            inserted <- addToProductHistory productId transferDestination thetime False
             updated <- updateWhere [ProductId ==. productId, ProductStockLocationId ==. transferOrigin] [ProductStockLocationId =. transferDestination]
             pure $ Right "updated"
 
+-- TRANSFER!
 postTransferAProdFromLocAtoB_ValidationR :: Handler () 
 postTransferAProdFromLocAtoB_ValidationR = do 
     thetime <- liftIO $ getCurrentTime
@@ -293,6 +314,8 @@ data TransferListProdLocationFromAToBJson = TransferListProdLocationFromAToBJson
     deriving anyclass FromJSON
     deriving Show
 -- is there a better way to handle this batch update? it seems ok and I didn't see a custom function for it
+
+-- TRANSFER!
 postTransferListProdFromLocAtoBR :: Handler Value 
 postTransferListProdFromLocAtoBR = do 
     transferList :: TransferListProdLocationFromAToBJson <- requireCheckJsonBody
@@ -303,7 +326,7 @@ postTransferListProdFromLocAtoBR = do
     return $ object ["attemptedUpdates" .= attemptedUpdates]
 
 -- myTodo updateWhere returns () but maybe there should be a version that returns whether it updated or not
--- the function to do this is updateWhereCount 
+-- a function to do this is updateWhereCount 
 
 data EsqA = EsqA {
         loc :: Int64
@@ -320,3 +343,25 @@ postLikeselectListEsq = do
 
 
 
+-- transfer prod function 
+-- need a productId from the relevant transfer
+-- for inspiration -> productAtLocation :: Key Product -> Key StockLocation -> DB (Maybe (Entity Product))
+-- insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> ProductTypes -> UTCTime -> Key StockLocation  ->  DB ()
+
+-- addToProductHistory :: Key Product -> Key StockLocation -> UTCTime -> DB (Key ProductHistory)
+addToProductHistory prodKey locKey time soldToCustomer = do 
+    -- myTodo consider soldToCustomer, if it True then we dont want want to do any inserting and want to report that this is unexpected
+    prodHistId <- insert $ ProductHistory prodKey locKey time soldToCustomer
+    pure prodHistId
+
+
+--   :: (PersistQueryRead backend, MonadIO m,
+    --   BaseBackend backend ~ SqlBackend) =>
+getProductsHistory :: Key Product -> DB [Entity ProductHistory]
+getProductsHistory prodKey = selectList [ProductHistoryProduct ==. prodKey] []
+
+getProductsHistoryHandler :: Handler [ProductHistory]
+getProductsHistoryHandler = do 
+    ProductKeyAPI {..} <- requireCheckJsonBody
+    xs <- runDB $ getProductsHistory productKeyAPI
+    return (map entityVal xs)

@@ -22,14 +22,13 @@
 
 /transfer-prod-location TransferAProdFromLocAtoB_R POST 
 
--- /transfer-prod-location TransferAProdFromLocAtoB_MaybeTR POST
-
 /transfer-prod-location-validate TransferAProdFromLocAtoB_ValidationR POST
                                  
--- /wharehouse-product WhareHouseAcquiresGenericProductR POST
+
 
 /transfer-prod-list-location TransferListProdFromLocAtoBR POST
     
 
 /likeselect-list-esq LikeselectListEsq POST
 
+/get-products-history ProductsHistoryHandler GET

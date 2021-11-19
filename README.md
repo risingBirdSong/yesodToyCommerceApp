@@ -204,3 +204,8 @@ customers
 
 
 haskell-language-server-wrapper: callProcess: /home/myhumanname/.ghcup/bin/haskell-language-server-8.8.4 "-d" (exit -11): failed
+
+
+## myTodos:
+	-- work on product history
+		-- update all places where TRANSFER! is used with function that adds to history
