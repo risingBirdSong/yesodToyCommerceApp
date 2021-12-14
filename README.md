@@ -208,4 +208,5 @@ haskell-language-server-wrapper: callProcess: /home/myhumanname/.ghcup/bin/haske
 
 ## myTodos:
 	-- work on product history
-		-- update all places where TRANSFER! is used with function that adds to history
+		-- [x] update all places where TRANSFER! is used with function that adds to history
+		-- sell products from store to a customer

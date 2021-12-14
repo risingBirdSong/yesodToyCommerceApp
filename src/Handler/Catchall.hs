@@ -28,6 +28,7 @@ import Database.Persist.Sql
 import DB.StoreInventory
 import qualified Data.List as L
 import Data.Aeson
+import Data.Aeson.Casing
 import Control.Monad.Trans.Maybe
 import Control.Monad.Validate
 import qualified Data.Validation as Vld
@@ -43,20 +44,34 @@ instance ToJSON ABook
 
 
 toBook :: CreateBook -> ProductId -> Book
-toBook CreateBook {..} prodId = Book prodId title author genre pageCount cost
+toBook CreateBook {..} prodId = Book prodId bookTitle bookAuthor bookGenre bookPageCount
 
 
 -- the API version of book
 data CreateBook = CreateBook
-    { title :: Text
-    , author :: Text
-    , genre :: Text
-    , pageCount :: Int
-    , cost :: Int
+    { bookTitle :: Text
+    , bookAuthor :: Text
+    , bookGenre :: Text
+    , bookPageCount :: Int
+    , bookCost :: Int
     }
     deriving stock (Show, Generic)
-    deriving anyclass FromJSON
 
+instance ToJSON CreateBook
+instance FromJSON CreateBook
+
+
+-- instance ToJSON CreateBook where 
+--     toJSON = genericToJSON defaultOptions
+--         {
+--             fieldLabelModifier = snakeCase . drop (length ("book" :: String))
+--         }
+
+-- instance FromJSON CreateBook where 
+--     parseJSON = genericParseJSON defaultOptions
+--         {
+--         fieldLabelModifier = snakeCase . drop (length ("book" :: String))
+--         }
 
 -- consider placing the random logic into monadRandom , more restricted
 generateFakeBook :: IO CreateBook
@@ -66,21 +81,37 @@ generateFakeBook = do
     genre <- genRandom FK.genre
     pages <- randomRIO (50, 500)
     cost <- randomRIO (5, 50)
-    pure $ CreateBook title auth genre pages cost 
+    pure $ (CreateBook title auth genre pages cost)
 
 
 toFood :: CreateFood -> ProductId -> Food
-toFood CreateFood {..} prodId = Food prodId foodType name weight description
+toFood CreateFood {..} prodId = Food prodId foodFoodType foodName foodWeight foodDescription
 
 data CreateFood = CreateFood
-    {   foodType :: FoodTypes 
-    ,   name :: Text
-    ,   weight :: Double
-    ,   description :: Text        
+    {   foodFoodType :: FoodTypes 
+    ,   foodName :: Text
+    ,   foodWeight :: Double
+    ,   foodDescription :: Text 
+    ,   foodCost :: Int 
     }  
     deriving stock Generic
-    deriving anyclass FromJSON
     deriving Show
+
+instance ToJSON CreateFood
+instance FromJSON CreateFood
+
+
+-- instance ToJSON CreateFood where 
+--     toJSON = genericToJSON defaultOptions
+--         {
+--             fieldLabelModifier = snakeCase . drop (length "food")
+--         }
+
+-- instance FromJSON CreateFood where 
+--     parseJSON = genericParseJSON defaultOptions
+--         {
+--         fieldLabelModifier = snakeCase . drop (length "food")
+--         }
 
 generateFakeFood :: IO CreateFood  
 generateFakeFood = do 
@@ -88,8 +119,9 @@ generateFakeFood = do
     foodTypeIndex :: Int <- randomRIO (0,length foodTypes -1 ) 
     name <- genRandom (FK.dish)
     weight :: Double <- randomRIO (1.0, 10.0)
+    cost :: Int <- randomRIO (1, 20)
     description <- genRandom (FK.descriptions)
-    pure $ CreateFood (foodTypes !! foodTypeIndex) name weight description
+    pure $ (CreateFood (foodTypes !! foodTypeIndex) name weight description cost)
 
 -- hmm don't know why this wasnt exported... generateNonDeterministic
 genRandom =  FK.generateWithSettings $ FK.setNonDeterministic FK.defaultFakerSettings
@@ -103,13 +135,13 @@ data Products = Books Book | Foods Food
 
 
 -- inferredTypeInsertProduct :: (PersistStoreWrite backend, MonadIO m, PersistEntity record, PersistEntityBackend record ~ BaseBackend backend,  BaseBackend backend ~ SqlBackend) => (Key Product -> record) -> UTCTime -> Int64 -> ReaderT backend m ()
-insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> ProductTypes -> UTCTime -> Key StockLocation  ->  DB ()
-insertProduct f productType now locationId = do
-    prodId <- insert $ Product productType locationId now
+insertProduct :: (PersistEntity a, PersistEntityBackend a ~ SqlBackend) => (ProductId -> a) -> ProductTypes -> UTCTime -> Int -> Key StockLocation ->  DB ()
+insertProduct f productType now cost locationId = do
+    prodId <- insert $ Product productType locationId cost now
     void $ insert (f prodId)
 
-insertProductBy f productTypes now locationId = do
-    prodId <- insert $ Product productTypes locationId now
+insertProductBy f productTypes now cost locationId = do
+    prodId <- insert $ Product productTypes locationId cost now
     void $ insertBy (f prodId)
 
 makeMainWharehouseDB :: DB ()
@@ -127,13 +159,16 @@ makeAStore locId name balance = do
         insert $ Store locId name balance
     pure ()
 
+-- overloadedRecordDot
+-- NoFieldSelectors
+
 postWharehouseAquiresBookR :: Handler Text 
 postWharehouseAquiresBookR = do
     gotYesod <- getYesod
     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
     theTime <- getCurrentTime
     apiBook :: CreateBook <- requireCheckJsonBody
-    _ <- runDB $ insertProduct (toBook apiBook) BookProduct theTime whareHouseId
+    _ <- runDB $ insertProduct (toBook apiBook) BookProduct theTime (bookCost apiBook) whareHouseId
     sendResponseStatus status201 ("BOOK stocked in store" :: Text)
 
 -- myTodo bring this back
@@ -143,7 +178,7 @@ postWharehouseAquiresFoodR = do
     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
     theTime <- getCurrentTime
     apiFood <- requireCheckJsonBody
-    theInsertion <- runDB $ insertProduct (toFood apiFood) FoodProduct theTime whareHouseId
+    theInsertion <- runDB $ insertProduct (toFood apiFood) FoodProduct theTime (foodCost apiFood) whareHouseId
     print theInsertion
     sendResponseStatus status201 ("FOOD stocked in store" :: Text)
 
@@ -153,15 +188,16 @@ postWharehouseNewRandomProductBy toProduct theProductType generateRandomFakeProd
     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
     theTime <- getCurrentTime
     apiProduct <- liftIO generateRandomFakeProduct
-    _ <- runDB $ insertProductBy (toProduct apiProduct) theProductType theTime whareHouseId
+    cost :: Int <- liftIO $ randomRIO (1, 100)
+    _ <- runDB $ insertProductBy (toProduct apiProduct) theProductType theTime cost whareHouseId
     print $ apiProduct
 
 postWharehouseNewRandomProduct toProduct theProductType generateRandomFakeProduct = do
     gotYesod <- getYesod
     let whareHouseId = appWharehouseLocation . appSettings $ gotYesod
     theTime <- getCurrentTime
-    apiProduct <- liftIO generateRandomFakeProduct
-    _ <- runDB $ insertProduct (toProduct apiProduct) theProductType theTime whareHouseId
+    (apiProduct, cost) <- liftIO generateRandomFakeProduct
+    _ <- runDB $ insertProduct (toProduct apiProduct) theProductType theTime  cost whareHouseId
     _ <- runDB deleteAllBooks'
     print $ apiProduct
 
@@ -249,7 +285,7 @@ postTransferAProdFromLocAtoB_R = do
         case (ensureProdLoc, ensureDestinationExists,  nameOfOrigin, nameOfDestination) of 
             (Just prod, Just (destExist) , Just (Entity _ nameOrigin), Just (Entity _ nameDest)) -> do 
                 updated <- updateWhere [ProductId ==. productId] [ProductStockLocationId =. transferDestination]
-                inserted <- addToProductHistory productId transferDestination thetime False
+                _ <- addToProductHistory productId transferDestination thetime False
                 pure $ Right ("The product was transferred from " <> ( stockLocationName nameOrigin) <> " to " <> (stockLocationName nameDest))
             (_,_,_,_) -> pure $ Left ("check the product location and origin")
     -- if this pattern happens again and again, then consider a custom ToJson Instance on a newtype wrapper for an Either,
@@ -271,15 +307,15 @@ verifyAndUpdateLocation (TransferProdLocationFromAToBJson {..}) = do
             updated <- updateWhere [ProductId ==. productId, ProductStockLocationId ==. transferOrigin] [ProductStockLocationId =. transferDestination]
             pure $ Right "updated"
 
-verifyAndUpdateLocationWithRegularArgs :: Key Product -> Key StockLocation -> Key StockLocation -> UTCTime -> DB (Either Text Text)
-verifyAndUpdateLocationWithRegularArgs productId transferOrigin transferDestination thetime = do 
+verifyAndUpdateLocationWithRegularArgsAndAddToHistory :: Key Product -> Key StockLocation -> Key StockLocation -> UTCTime -> DB (Either Text Text)
+verifyAndUpdateLocationWithRegularArgsAndAddToHistory productId transferOrigin transferDestination thetime = do 
     ensureProdLoc <- productAtLocation productId transferOrigin
     ensureDestinationExists <- selectFirst [StockLocationId ==. transferDestination] []
     case validateProdAtLocationAndDestinationExists ensureProdLoc ensureDestinationExists of
         Vld.Failure errs -> do
             pure $ Left errs 
         Vld.Success _ -> do 
-            inserted <- addToProductHistory productId transferDestination thetime False
+            _ <- addToProductHistory productId transferDestination thetime False
             updated <- updateWhere [ProductId ==. productId, ProductStockLocationId ==. transferOrigin] [ProductStockLocationId =. transferDestination]
             pure $ Right "updated"
 
@@ -288,7 +324,7 @@ postTransferAProdFromLocAtoB_ValidationR :: Handler ()
 postTransferAProdFromLocAtoB_ValidationR = do 
     thetime <- liftIO $ getCurrentTime
     TransferProdLocationFromAToBJson {..} <- requireCheckJsonBody
-    res <- runDB $ verifyAndUpdateLocationWithRegularArgs productId transferOrigin transferDestination thetime
+    res <- runDB $ verifyAndUpdateLocationWithRegularArgsAndAddToHistory productId transferOrigin transferDestination thetime
     case res of
         Left errs -> sendResponseStatus status400 (errs :: Text)
         Right _ ->   sendResponseStatus status201 ("The product was transferred" :: Text)
@@ -322,7 +358,7 @@ postTransferListProdFromLocAtoBR = do
     let TransferListProdLocationFromAToBJson {..} = transferList
     thetime <- liftIO getCurrentTime
     attemptedUpdates <- runDB $ do
-        mapM (\prodId -> verifyAndUpdateLocationWithRegularArgs prodId transferOriginForList transferDestinationForList thetime) productIds
+        mapM (\prodId -> verifyAndUpdateLocationWithRegularArgsAndAddToHistory prodId transferOriginForList transferDestinationForList thetime) productIds
     return $ object ["attemptedUpdates" .= attemptedUpdates]
 
 -- myTodo updateWhere returns () but maybe there should be a version that returns whether it updated or not
@@ -360,8 +396,44 @@ addToProductHistory prodKey locKey time soldToCustomer = do
 getProductsHistory :: Key Product -> DB [Entity ProductHistory]
 getProductsHistory prodKey = selectList [ProductHistoryProduct ==. prodKey] []
 
-getProductsHistoryHandler :: Handler [ProductHistory]
+-- myTodo how to type Handler as a specific type like 
+-- Handler ProductHistory
+data ProductHistoryAPI = ProductHistoryAPI [ProductHistory] 
+    deriving stock Generic
+    deriving anyclass FromJSON
+    deriving anyclass ToJSON
+    -- deriving ToTypedContent
+    deriving Show 
+
+getProductsHistoryHandler :: Handler Value
 getProductsHistoryHandler = do 
     ProductKeyAPI {..} <- requireCheckJsonBody
     xs <- runDB $ getProductsHistory productKeyAPI
-    return (map entityVal xs)
+    -- return (ProductHistoryAPI $ map entityVal xs)
+    returnJson xs
+
+
+
+
+
+
+-- for customer to buy product from a store
+    -- product must be at a store, not the wharehouse for example 
+    -- customer must have enough money, and transfer the money from the customer to the store
+    -- (would be kind of cool to emulate like the old way where the store has the cash and then its transferred to a central location like at end of day )
+    -- product should be transferred from product history to customer history
+
+-- myTodo refactor this to use probs MaybeT?
+customerBuysFromStore :: Key Customer -> Key Store -> Key Product -> DB (Either String String)
+customerBuysFromStore keyCust keyStore keyProd = do 
+    mCustomer <- selectFirst [CustomerId ==. keyCust] []
+    mStore <- selectFirst [StoreId ==. keyStore] []
+    mProd <- selectFirst [ProductId ==. keyProd] []
+
+    case (mCustomer, mStore, mProd) of
+        (Just (Entity cId cust), Just (Entity sId store), Just (Entity pId prod)) -> do 
+            -- if (balanceCustomer )
+            
+            
+            pure (Right "it was transfered") 
+        _ -> pure (Left "todo"    )    

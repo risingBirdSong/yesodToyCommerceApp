@@ -54,6 +54,7 @@ import Database.Persist.Sql (toSqlKey)
 import DB.StoreInventory
 import Data.Aeson
 import Data.Aeson.QQ
+import Database.Persist.Postgresql
 
 -- import Debug.Trace
 
@@ -96,6 +97,7 @@ makeFoundation appSettings = do
     -- void $ trace "my pgConnStr --> " pgConnStr
 
     -- Perform database migration using our application's logging settings.
+    runLoggingT (runSqlPool (printMigration migrateAll) pool) logFunc
     runLoggingT (runSqlPool (runMigration migrateAll) pool) logFunc
 
     -- Return the foundation
@@ -214,21 +216,21 @@ db = handler . runDB
 -- initial data after deleting the database
 
 -- could just use do syntax to simplify
-initialDoA = theWharehouse >> hawthorneStore >> burnsideStore >> fremontStore
-initialDoB = makeManyBooks >> makeManyFoods
+-- initialDoA = theWharehouse >> hawthorneStore >> burnsideStore >> fremontStore
+-- initialDoB = makeManyBooks >> makeManyFoods
 
-theWharehouse = handler makeMainWharehouseHandler
-hawthorneStore = handler $ makeAStore (toSqlKey 2) "Hawthorne" 100 
-burnsideStore = handler $ makeAStore (toSqlKey 3) "Burnside" 100
-fremontStore = handler $ makeAStore (toSqlKey 4) "Fremont" 100
+-- theWharehouse = handler makeMainWharehouseHandler
+-- hawthorneStore = handler $ makeAStore (toSqlKey 2) "Hawthorne" 100 
+-- burnsideStore = handler $ makeAStore (toSqlKey 3) "Burnside" 100
+-- fremontStore = handler $ makeAStore (toSqlKey 4) "Fremont" 100
 
 
-randomNewBookInWharehouse = handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook
-randomNewFoodInWharehouse = handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood
+-- randomNewBookInWharehouse = handler $ postWharehouseNewRandomProductBy toBook BookProduct (generateFakeBook)
+-- randomNewFoodInWharehouse = handler $ postWharehouseNewRandomProduct toFood FoodProduct (generateFakeFood)
 
--- so this works but is very slow but thats ok for now
-makeManyBooks = mapM_ (\_ -> handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook) [1..20] 
-makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood ) [1..20] 
+-- -- so this works but is very slow but thats ok for now
+-- makeManyBooks = mapM_ (\_ -> handler $ postWharehouseNewRandomProductBy toBook BookProduct generateFakeBook) [1..20] 
+-- makeManyFoods = mapM_ (\_ -> handler $ postWharehouseNewRandomProduct toFood FoodProduct generateFakeFood ) [1..20] 
 
 
 -- insert into stock_location (id, name) values (1, 'our main wharehouse');

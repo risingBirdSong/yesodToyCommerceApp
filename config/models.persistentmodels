@@ -64,7 +64,6 @@ Book json
     author Text
     genre Text 
     pageCount Int
-    cost Int
     deriving Eq
     deriving Show
 
@@ -72,6 +71,7 @@ Book json
 Product json
     productType ProductTypes  
     stockLocationId StockLocationId
+    cost Int
     acquired UTCTime
 
 ProductHistory json
@@ -82,6 +82,8 @@ ProductHistory json
     soldToCustomer Bool default=False
     deriving Eq
     deriving Show
+    -- deriving Generic
+    -- deriving ToJSON
 
 Customer json
     name Text
@@ -101,6 +103,11 @@ Wharehouse json
     stockLocationId StockLocationId
     name Text
     deriving Eq
+    deriving Show
+
+Headquarters json 
+    balance Int
+    deriving Eq 
     deriving Show
 
 StockLocation json 

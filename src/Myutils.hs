@@ -24,18 +24,18 @@ instance FromJSON ProductTypes
 data Departments = 	MusicDept | BooksDept | FoodDept | ClothesDept | FurnitureDept deriving (Show, Read, Eq, Generic)
 derivePersistField "Departments"
 
-instance ToJSON Departments where
+instance ToJSON Departments 
 instance FromJSON Departments
 
 data OrderStatus = Processing | InTransit | Delivered | Cancelled deriving (Show, Read, Eq, Generic)
 derivePersistField "OrderStatus"
 
-instance ToJSON OrderStatus where
+instance ToJSON OrderStatus 
 instance FromJSON OrderStatus
 
 data FoodTypes =  Beverage | Snack | Dinner deriving (Show, Read, Eq, Generic)
 derivePersistField "FoodTypes"
 
-instance ToJSON FoodTypes where
+instance ToJSON FoodTypes 
 instance FromJSON FoodTypes
 
