@@ -32,3 +32,5 @@
 /likeselect-list-esq LikeselectListEsq POST
 
 /get-products-history ProductsHistoryHandler GET
+
+/member_customer_buys_from_store MemberCustomerBuysFromStoreR POST

@@ -73,6 +73,7 @@ Product json
     stockLocationId StockLocationId
     cost Int
     acquired UTCTime
+    deriving Show
 
 ProductHistory json
     product ProductId

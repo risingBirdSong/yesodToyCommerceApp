@@ -34,6 +34,7 @@ import Control.Monad.Validate
 import qualified Data.Validation as Vld
 import Control.Lens ((#))
 import Control.Concurrent
+import Data.Char
 
 
 data ABook = ABook {aBook :: Entity Book}
@@ -129,8 +130,8 @@ genRandom =  FK.generateWithSettings $ FK.setNonDeterministic FK.defaultFakerSet
 
 -- also consider the reverse where we convert the BD representation to the API representation
 
--- not being used currently 
 data Products = Books Book | Foods Food
+-- not being used currently 
 
 
 
@@ -424,16 +425,55 @@ getProductsHistoryHandler = do
     -- product should be transferred from product history to customer history
 
 -- myTodo refactor this to use probs MaybeT?
-customerBuysFromStore :: Key Customer -> Key Store -> Key Product -> DB (Either String String)
-customerBuysFromStore keyCust keyStore keyProd = do 
+
+data MemberCustomerBuysFromStoreAPI = MemberCustomerBuysFromStoreAPI {
+    mcbfsKeyCust :: Key Customer, 
+    mcbfsKeyStore :: Key Store, 
+    mcbfsKeyProd :: Key Product
+} deriving Generic
+        
+instance ToJSON MemberCustomerBuysFromStoreAPI where 
+    toJSON = genericToJSON defaultOptions
+        {
+            fieldLabelModifier = camelCase . drop (length ("mcbfs" :: String))
+        }
+
+instance FromJSON MemberCustomerBuysFromStoreAPI where 
+    parseJSON = genericParseJSON defaultOptions
+        {
+        fieldLabelModifier = camelCase . drop (length ("mcbfs" :: String))
+        }
+
+
+postMemberCustomerBuysFromStoreR :: Handler String 
+postMemberCustomerBuysFromStoreR = do 
+    currentTime <- liftIO $ getCurrentTime
+    MemberCustomerBuysFromStoreAPI {..} <- requireCheckJsonBody
+    eProductSold <- runDB $ memberCustomerBuysFromStoreDB mcbfsKeyCust mcbfsKeyStore mcbfsKeyProd currentTime
+    case eProductSold of
+        Left e -> pure e
+        Right s -> pure s
+
+    -- pure eProductSold
+
+-- myTodo how could i do something like this?
+-- instance ToTypedContent (Either a b) where
+--     toTypedContent (Left e) = TypedContent typePlain (toContent e)
+--     toTypedContent (Right s) = TypedContent typePlain (toContent s)
+
+memberCustomerBuysFromStoreDB :: (Key Customer) -> Key Store -> Key Product -> UTCTime -> DB (Either String String)
+memberCustomerBuysFromStoreDB keyCust keyStore keyProd currentTime = do 
+    -- okay so this is hack because it allows to resell the item again and again, need to check that the ProductHistory soldToCustomer == True
     mCustomer <- selectFirst [CustomerId ==. keyCust] []
     mStore <- selectFirst [StoreId ==. keyStore] []
     mProd <- selectFirst [ProductId ==. keyProd] []
 
     case (mCustomer, mStore, mProd) of
-        (Just (Entity cId cust), Just (Entity sId store), Just (Entity pId prod)) -> do 
-            -- if (balanceCustomer )
-            
-            
-            pure (Right "it was transfered") 
+        (Just (Entity cId Customer {..}), Just (Entity sId Store {..}), Just (Entity pId Product {..})) -> do 
+            if (customerBalance < productCost) then pure $ Left "customer doesnt have enough money" else do
+                void $ update cId  [CustomerBalance -=. productCost]
+                void $ update sId [StoreBalance +=. productCost]
+                void $ updateWhere [ProductHistoryProduct ==. pId] [ProductHistorySoldToCustomer =. True, ProductHistoryTransferTime =. currentTime] -- the product is now the customers
+                pure $ Right "the product has been sold to the customer"
         _ -> pure (Left "todo"    )    
+
