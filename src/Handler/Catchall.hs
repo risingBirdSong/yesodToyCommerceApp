@@ -477,5 +477,6 @@ memberCustomerBuysFromStoreDB keyCust keyStore keyProd currentTime = do
                 void $ update sId [StoreBalance +=. productCost]
                 void $ updateWhere [ProductHistoryProduct ==. pId] [ProductHistorySoldToCustomer =. True, ProductHistoryTransferTime =. currentTime] -- the product is now the customers
                 pure $ Right "the product has been sold to the customer"
+        (Just _, Just _ , Just _ , Nothing) -> pure $ Left "there is no product history and therefore cant be sold!"
         _ -> pure (Left "error"    )    
 
