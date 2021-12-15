@@ -467,13 +467,15 @@ memberCustomerBuysFromStoreDB keyCust keyStore keyProd currentTime = do
     mCustomer <- selectFirst [CustomerId ==. keyCust] []
     mStore <- selectFirst [StoreId ==. keyStore] []
     mProd <- selectFirst [ProductId ==. keyProd] []
+    mProductHistory <- selectFirst [ProductHistoryProduct ==. keyProd] []
 
-    case (mCustomer, mStore, mProd) of
-        (Just (Entity cId Customer {..}), Just (Entity sId Store {..}), Just (Entity pId Product {..})) -> do 
+    case (mCustomer, mStore, mProd, mProductHistory) of
+        (_, _,_ , Just (Entity phId (ProductHistory _ _ _ True))) -> pure $ Left "already sold"
+        (Just (Entity cId Customer {..}), Just (Entity sId Store {..}), Just (Entity pId Product {..}), Just (Entity phId ProductHistory {..})) -> do 
             if (customerBalance < productCost) then pure $ Left "customer doesnt have enough money" else do
                 void $ update cId  [CustomerBalance -=. productCost]
                 void $ update sId [StoreBalance +=. productCost]
                 void $ updateWhere [ProductHistoryProduct ==. pId] [ProductHistorySoldToCustomer =. True, ProductHistoryTransferTime =. currentTime] -- the product is now the customers
                 pure $ Right "the product has been sold to the customer"
-        _ -> pure (Left "todo"    )    
+        _ -> pure (Left "error"    )    
 
